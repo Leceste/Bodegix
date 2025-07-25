@@ -5,6 +5,7 @@ const usuariosController = require('../controllers/usuariosController');
 const auth = require('../middlewares/authMiddleware'); 
 
 // Listar usuarios
+router.get('/admin', auth, usuariosController.getUsuariosAdmin);
 router.get('/', auth, usuariosController.getUsuarios);
 
 // Crear usuario
@@ -24,5 +25,8 @@ router.delete('/:id', auth, usuariosController.deleteUsuario);
 
 // Obtener usuario por ID (nueva ruta)
 router.get('/:id', auth, usuariosController.getUsuarioById);
+
+// Login con Google
+router.post('/google-login', usuariosController.loginConGoogle);
 
 module.exports = router;

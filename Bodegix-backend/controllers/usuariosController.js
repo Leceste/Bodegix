@@ -4,17 +4,69 @@ const Rol = require('../models/Rol');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-exports.getUsuarios = async (req, res) => {
-    try {
-        const usuarios = await Usuario.findAll({
-            attributes: { exclude: ['contraseña'] },
-            include: ['rol', 'empresa']
-        });
-        res.json(usuarios);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID); // Asegúrate de que esté en tu .env
+
+exports.loginConGoogle = async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) return res.status(400).json({ message: 'Token no proporcionado' });
+
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name } = payload;
+
+    let usuario = await Usuario.findOne({ where: { correo: email } });
+
+    const tokenJWT = jwt.sign(
+      {
+        id: usuario.id,
+        rol_id: usuario.rol_id,
+        empresa_id: usuario.empresa_id,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    usuario.token = tokenJWT;
+    await usuario.save();
+
+    const { contraseña: _, ...usuarioSinContraseña } = usuario.toJSON();
+    res.json({ usuario: usuarioSinContraseña, token: tokenJWT });
+  } catch (error) {
+    console.error('[Google Login Error]', error);
+    res.status(401).json({ message: 'Token de Google inválido' });
+  }
 };
+
+
+exports.getUsuariosAdmin = async (req, res) => {
+  try {
+    const { rol_id } = req.usuario;
+
+    if (rol_id !== 1) {
+      return res.status(403).json({ error: 'Acceso no autorizado' });
+    }
+
+    const usuarios = await Usuario.findAll({
+      attributes: { exclude: ['contraseña'] },
+      include: [
+        { model: Empresa, as: 'empresa' },
+        { model: Rol, as: 'rol' }
+      ]
+    });
+
+    res.json(usuarios);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 exports.getUsuarios = async (req, res) => {
   try {
