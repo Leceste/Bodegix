@@ -1,33 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Paper,
-  TextField,
-  Button,
-  Grid,
-  Alert
+  Box, Typography, Paper, TextField, Button, Grid, Alert,
+  Table, TableContainer, TableHead, TableRow, TableCell, TableBody
 } from '@mui/material';
 import Sidebar from '../../components/Layout/Sidebar';
 import Topbar from '../../components/Layout/Topbar';
 import { jwtDecode } from 'jwt-decode';
 
 const RegistroEmpleado = () => {
-  const [formData, setFormData] = useState({
-    nombre: '',
-    correo: '',
-    telefono: '',
-    contraseña: ''
-  });
-
+  const [formData, setFormData] = useState({ nombre: '', correo: '', contraseña: '' });
+  const [empleados, setEmpleados] = useState([]);
+  const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState(null);
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
+  const [token, setToken] = useState('');
+  const [empresaId, setEmpresaId] = useState(null);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      const decoded = jwtDecode(storedToken);
+      setEmpresaId(decoded.empresa_id);
+      setToken(storedToken);
+      fetchEmpleados(storedToken, decoded.empresa_id);
+    }
+  }, []);
+
+  const fetchEmpleados = async (token, empresaId) => {
+    try {
+      const res = await fetch('/api/usuarios', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      const empleadosEmpresa = data.filter(emp => emp.rol_id === 3 && emp.empresa_id === empresaId);
+      setEmpleados(empleadosEmpresa);
+    } catch (err) {
+      console.error('Error al obtener empleados:', err);
+    }
+  };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
     setSuccess(null);
     setError(null);
   };
@@ -38,40 +51,70 @@ const RegistroEmpleado = () => {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Token no encontrado. Inicia sesión nuevamente.');
+      if (!token || !empresaId) {
+        setError('Sesión inválida. Vuelve a iniciar sesión.');
         return;
       }
 
-      const decoded = jwtDecode(token);
-      const empresa_id = decoded.empresa_id;
+      const body = {
+        nombre: formData.nombre,
+        correo: formData.correo,
+        contraseña: formData.contraseña,
+        rol_id: 3,
+        empresa_id: empresaId,
+      };
 
-      const res = await fetch('/api/usuarios', {
-        method: 'POST',
+      const url = empleadoSeleccionado
+        ? `/api/usuarios/${empleadoSeleccionado.id}`
+        : '/api/usuarios';
+
+      const method = empleadoSeleccionado ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          nombre: formData.nombre,
-          correo: formData.correo,
-          telefono: formData.telefono,
-          contraseña: formData.contraseña,
-          rol_id: 3,
-          empresa_id: empresa_id
-        })
+        body: JSON.stringify(body)
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Error al registrar el empleado');
+        throw new Error(err.error || 'Error al guardar empleado');
       }
 
-      setSuccess('Empleado registrado correctamente.');
-      setFormData({ nombre: '', correo: '', telefono: '', contraseña: '' });
+      setSuccess(empleadoSeleccionado ? 'Empleado actualizado.' : 'Empleado registrado.');
+      setFormData({ nombre: '', correo: '', contraseña: '' });
+      setEmpleadoSeleccionado(null);
+      fetchEmpleados(token, empresaId);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleEditar = (empleado) => {
+    setEmpleadoSeleccionado(empleado);
+    setFormData({
+      nombre: empleado.nombre,
+      correo: empleado.correo,
+      contraseña: ''
+    });
+  };
+
+  const handleEliminar = async (id) => {
+    if (!window.confirm('¿Seguro que deseas eliminar este empleado?')) return;
+
+    try {
+      const res = await fetch(`/api/usuarios/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error('Error al eliminar empleado');
+      fetchEmpleados(token, empresaId);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -80,24 +123,13 @@ const RegistroEmpleado = () => {
       <Sidebar />
       <Box flexGrow={1} p={3}>
         <Topbar title="Registrar Empleado" />
-        <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3, mb: 4 }}>
           <Typography variant="h6" gutterBottom>
-            Formulario de registro de empleados
-          </Typography>
-          <Typography variant="body1" color="text.secondary" gutterBottom>
-            Aquí puedes registrar manualmente nuevos empleados para tu empresa.
+            {empleadoSeleccionado ? 'Editar Empleado' : 'Formulario de registro de empleados'}
           </Typography>
 
-          {success && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {success}
-            </Alert>
-          )}
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+          {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <Box component="form" onSubmit={handleSubmit} mt={2}>
             <Grid container spacing={2}>
@@ -107,8 +139,7 @@ const RegistroEmpleado = () => {
                   name="nombre"
                   value={formData.nombre}
                   onChange={handleChange}
-                  fullWidth
-                  required
+                  fullWidth required
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -118,18 +149,7 @@ const RegistroEmpleado = () => {
                   type="email"
                   value={formData.correo}
                   onChange={handleChange}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Teléfono"
-                  name="telefono"
-                  value={formData.telefono}
-                  onChange={handleChange}
-                  fullWidth
-                  required
+                  fullWidth required
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -139,17 +159,77 @@ const RegistroEmpleado = () => {
                   type="password"
                   value={formData.contraseña}
                   onChange={handleChange}
-                  fullWidth
-                  required
+                  fullWidth required={!empleadoSeleccionado}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <Button type="submit" variant="contained" color="primary" fullWidth>
-                  Registrar Empleado
+                  {empleadoSeleccionado ? 'Actualizar Empleado' : 'Registrar Empleado'}
                 </Button>
               </Grid>
+              {empleadoSeleccionado && (
+                <Grid item xs={12} sm={6}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    fullWidth
+                    onClick={() => {
+                      setEmpleadoSeleccionado(null);
+                      setFormData({ nombre: '', correo: '', contraseña: '' });
+                    }}
+                  >
+                    Cancelar Edición
+                  </Button>
+                </Grid>
+              )}
             </Grid>
           </Box>
+        </Paper>
+
+        {/* Tabla de empleados */}
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Empleados Registrados en tu Empresa
+          </Typography>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                  <TableCell sx={{ color: '#fff' }}>Nombre</TableCell>
+                  <TableCell sx={{ color: '#fff' }}>Correo</TableCell>
+                  <TableCell sx={{ color: '#fff' }}>Teléfono</TableCell>
+                  <TableCell sx={{ color: '#fff' }}>Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {empleados.map((emp) => (
+                  <TableRow key={emp.id}>
+                    <TableCell>{emp.nombre}</TableCell>
+                    <TableCell>{emp.correo}</TableCell>
+                    <TableCell>{emp.empresa?.nombre || 'N/A'}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        sx={{ mr: 1 }}
+                        onClick={() => handleEditar(emp)}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => handleEliminar(emp.id)}
+                      >
+                        Eliminar
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Paper>
       </Box>
     </Box>

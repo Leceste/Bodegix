@@ -1,6 +1,6 @@
 const Plan = require('../models/Plan');
 
-// ✅ GET /api/planes
+// GET /api/planes
 exports.getPlanes = async (req, res) => {
     try {
         const planes = await Plan.findAll();
@@ -10,7 +10,7 @@ exports.getPlanes = async (req, res) => {
     }
 };
 
-// ✅ GET /api/planes/:id
+// GET /api/planes/:id
 exports.getPlanById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -26,12 +26,12 @@ exports.getPlanById = async (req, res) => {
     }
 };
 
-// ✅ POST /api/planes
+// POST /api/planes
 exports.createPlan = async (req, res) => {
     try {
-        const { nombre, limite_usuarios, costo } = req.body;
+        const { nombre, limite_usuarios, costo, lockers } = req.body;
 
-        if (!nombre || !limite_usuarios || !costo) {
+        if (!nombre || !limite_usuarios || !costo || lockers == null) {
             return res.status(400).json({ error: 'Todos los campos son obligatorios' });
         }
 
@@ -40,18 +40,18 @@ exports.createPlan = async (req, res) => {
             return res.status(409).json({ error: 'El plan ya está registrado' });
         }
 
-        const plan = await Plan.create({ nombre, limite_usuarios, costo });
+        const plan = await Plan.create({ nombre, limite_usuarios, costo, lockers });
         res.status(201).json(plan);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-// ✅ PUT /api/planes/:id
+// PUT /api/planes/:id
 exports.updatePlan = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nombre, limite_usuarios, costo } = req.body;
+        const { nombre, limite_usuarios, costo, lockers } = req.body;
 
         const plan = await Plan.findByPk(id);
         if (!plan) {
@@ -59,8 +59,9 @@ exports.updatePlan = async (req, res) => {
         }
 
         if (nombre) plan.nombre = nombre;
-        if (limite_usuarios) plan.limite_usuarios = limite_usuarios;
-        if (costo) plan.costo = costo;
+        if (limite_usuarios != null) plan.limite_usuarios = limite_usuarios;
+        if (costo != null) plan.costo = costo;
+        if (lockers != null) plan.lockers = lockers;
 
         await plan.save();
         res.json(plan);
@@ -69,7 +70,7 @@ exports.updatePlan = async (req, res) => {
     }
 };
 
-// ✅ DELETE /api/planes/:id
+// DELETE /api/planes/:id
 exports.deletePlan = async (req, res) => {
     try {
         const { id } = req.params;

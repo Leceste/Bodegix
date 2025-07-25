@@ -22,9 +22,8 @@ const SettingsPage = () => {
     nombre: '',
     correo: '',
     contraseña: '',
-    empresa_id: '',
   });
-  const [empresas, setEmpresas] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
@@ -48,7 +47,6 @@ const SettingsPage = () => {
           nombre: data.nombre || '',
           correo: data.correo || '',
           contraseña: '',
-          empresa_id: data.empresa_id || '',
         });
       } catch (err) {
         setError('Error al cargar datos del usuario.');
@@ -59,22 +57,6 @@ const SettingsPage = () => {
     fetchUser();
   }, [userId, token]);
 
-  // Fetch empresas para select
-  useEffect(() => {
-    const fetchEmpresas = async () => {
-      try {
-        const res = await fetch('/api/empresas', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error('No se pudieron obtener empresas');
-        const data = await res.json();
-        setEmpresas(data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchEmpresas();
-  }, [token]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -159,25 +141,6 @@ const SettingsPage = () => {
               fullWidth
               margin="normal"
             />
-
-            {/* Select para empresas */}
-            <TextField
-              select
-              label="Empresa"
-              name="empresa_id"
-              value={formData.empresa_id}
-              onChange={handleChange}
-              fullWidth
-              required
-              margin="normal"
-              helperText="Selecciona la empresa"
-            >
-              {empresas.map((empresa) => (
-                <MenuItem key={empresa.id} value={empresa.id}>
-                  {empresa.nombre}
-                </MenuItem>
-              ))}
-            </TextField>
 
             <Button
               type="submit"
