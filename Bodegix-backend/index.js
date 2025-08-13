@@ -15,8 +15,8 @@ const accesosRoutes = require('./routes/accesosRoutes');
 const suscripcionesRoutes = require('./routes/suscripcionesRoutes');
 const eventosRoutes = require('./routes/eventosRoutes');
 const loginMovilRoutes = require('./routes/loginMovilRoute');
-const paypalRoutes = require('./routes/paypalRoutes');
-const reportsRoutes = require('./routes/reportsRoutes');
+const paypalRoutes = require('./routes/paypalRoutes'); // aquí la importación
+const reportsRoutes = require('./routes/reportsRoutes'); // Importar rutas
 
 // Ruta Mongo
 const temperaturasRouter = require('./routes/temperaturas'); // ← nombre correcto
@@ -35,11 +35,11 @@ app.use('/api/accesos', accesosRoutes);
 app.use('/api/suscripciones', suscripcionesRoutes);
 app.use('/api/eventos', eventosRoutes);
 app.use('/api/movil', loginMovilRoutes);
-app.use('/api/paypal', paypalRoutes);
-app.use('/api/reports', reportsRoutes);
-
-// Registrar rutas Mongo
+app.use('/api/paypal', paypalRoutes); 
 app.use('/api/temperaturas', temperaturasRouter);
+
+// Conexión a base de datos y arranque de servidor
+app.use('/api/reports', reportsRoutes);// Registrar la nueva ruta
 
 // Conexión y arranque
 const PORT = process.env.PORT || 5000;

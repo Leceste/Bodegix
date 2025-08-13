@@ -121,7 +121,7 @@ router.post("/capture-order/:orderID", async (req, res) => {
       empresa_id,
       plan_id: planIdParaAjuste,
     });
-  } catch (err) {
+  } catch (err) {x
     console.error("Error capturando orden:", err);
     return res.status(500).json({ error: "Error capturando orden" });
   }
