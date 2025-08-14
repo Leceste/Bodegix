@@ -6,6 +6,10 @@ const auth = require('../middlewares/authMiddleware');
 // Reporte (si quieres que requiera token, agrega 'auth' como middleware)
 router.get('/reporte', suscripcionesController.getReporteSuscripciones);
 
+// NUEVOS endpoints basados en vistas SQL
+router.get('/ultimas', auth, suscripcionesController.getUltimasPorEmpresa);  // <--- NUEVO
+router.get('/mensuales', auth, suscripcionesController.getMensuales);        // <--- NUEVO
+
 // Estado de suscripción por empresa (devuelve { activa: true/false })
 router.get('/status', auth, suscripcionesController.getEstadoEmpresa);
 

@@ -1,4 +1,3 @@
-// src/pages/admin/VisualizacionGraficas.jsx
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Box,
@@ -54,147 +53,142 @@ const fmtDate = (d) => {
   return isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString();
 };
 
+const pad2 = (n) => String(n).padStart(2, '0');
+
 // ---------- componente principal ----------
 const VisualizacionGraficas = () => {
-  const [suscripciones, setSuscripciones] = useState([]);
+  // Datos base
   const [empresas, setEmpresas] = useState([]);
-  const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
+  const [sinSub, setSinSub] = useState([]);            // de vw_empresas_sin_suscripcion
+  const [ultimas, setUltimas] = useState([]);          // de vw_panel_ultimas_suscripciones
+  const [historico, setHistorico] = useState([]);      // de vw_suscripciones_full
+  const [mensuales, setMensuales] = useState([]);      // de vw_suscripciones_mensuales
 
+  // UI state
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [estado, setEstado] = useState('todas'); // todas | activa | inactiva | otra
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const API = process.env.NEXT_PUBLIC_API_URL || ''; // ← base URL del backend (ej. http://localhost:5000)
+
+  const fetchJSON = async (url, headers) => {
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status} ${res.statusText} - ${url} - ${msg}`);
+    }
+    return res.json();
+  };
 
   const fetchDatos = useCallback(async () => {
     try {
       setLoading(true);
-      const [resEmpresas, resSuscripciones] = await Promise.all([
-        fetch('/api/empresas', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/suscripciones', { headers: { Authorization: `Bearer ${token}` } })
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const [emp, sin, ult, hist, men] = await Promise.all([
+        fetchJSON(`${API}/api/empresas`, headers),
+        fetchJSON(`${API}/api/empresas/sin-suscripcion`, headers),
+        fetchJSON(`${API}/api/suscripciones/ultimas`, headers),
+        fetchJSON(`${API}/api/suscripciones`, headers),
+        fetchJSON(`${API}/api/suscripciones/mensuales`, headers),
       ]);
 
-      const empresasData = await resEmpresas.json();
-      const suscripcionesData = await resSuscripciones.json();
-
-      setEmpresas(Array.isArray(empresasData) ? empresasData : []);
-      setSuscripciones(Array.isArray(suscripcionesData) ? suscripcionesData : []);
+      setEmpresas(Array.isArray(emp) ? emp : []);
+      setSinSub(Array.isArray(sin) ? sin : []);
+      setUltimas(Array.isArray(ult) ? ult : []);
+      setHistorico(Array.isArray(hist) ? hist : []);
+      setMensuales(Array.isArray(men) ? men : []);
     } catch (err) {
-      console.error('Error al obtener empresas o suscripciones:', err);
-      setEmpresas([]);
-      setSuscripciones([]);
+      console.error('Error al obtener datos:', err);
+      setEmpresas([]); setSinSub([]); setUltimas([]); setHistorico([]); setMensuales([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, API]);
 
   useEffect(() => {
     fetchDatos();
   }, [fetchDatos]);
 
-  // --- Última suscripción por empresa (para cards) ---
-  const ultimasSuscripciones = useMemo(() => {
-    const map = new Map(); // empresaId -> sub más reciente
-    for (const sub of suscripciones) {
-      const empresaId = sub?.empresa?.id ?? sub?.empresa_id;
-      if (!empresaId) continue;
-      const current = map.get(empresaId);
-      const f = new Date(sub.fecha_inicio);
-      if (!current || f > new Date(current.fecha_inicio)) {
-        map.set(empresaId, sub);
-      }
-    }
-    return Array.from(map.values());
-  }, [suscripciones]);
-
-  const empresasConSuscripcionIds = useMemo(
-    () => new Set(ultimasSuscripciones.map((s) => s?.empresa?.id ?? s?.empresa_id)),
-    [ultimasSuscripciones]
-  );
-
-  const empresasSinSuscripcion = useMemo(
-    () => empresas.filter((e) => !empresasConSuscripcionIds.has(e.id)),
-    [empresas, empresasConSuscripcionIds]
-  );
-
-  // KPI
+  // KPI (con base en ultimas)
   const kpis = useMemo(() => {
     const totalEmpresas = empresas.length;
-    const activas = ultimasSuscripciones.filter(s => String(s?.estado || '').toLowerCase() === 'activa').length;
-    const inactivas = ultimasSuscripciones.filter(s => String(s?.estado || '').toLowerCase() === 'inactiva').length;
-    const sinSub = empresasSinSuscripcion.length;
-    return { totalEmpresas, activas, inactivas, sinSub };
-  }, [empresas, ultimasSuscripciones, empresasSinSuscripcion]);
+    const activas = ultimas.filter(s => String(s?.estado || '').toLowerCase() === 'activa').length;
+    const inactivas = ultimas.filter(s => String(s?.estado || '').toLowerCase() === 'inactiva').length;
+    const sin = sinSub.length;
+    return { totalEmpresas, activas, inactivas, sinSub: sin };
+  }, [empresas, ultimas, sinSub]);
 
-  // filtros de tarjetas
-  const listaTarjetas = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
+  // Filtros de búsqueda
+  const termino = busqueda.trim().toLowerCase();
+  const matchTexto = (nombre) => !termino || String(nombre || '').toLowerCase().includes(termino);
 
-    const matchTexto = (nombre) =>
-      !termino || String(nombre || '').toLowerCase().includes(termino);
-
-    let cards = ultimasSuscripciones
-      .filter((s) => matchTexto(s?.empresa?.nombre))
+  // Tarjetas con suscripción (vienen de vw_panel_ultimas_suscripciones)
+  const tarjetasConSub = useMemo(() => {
+    return ultimas
+      .filter((s) => matchTexto(s?.empresa_nombre))
       .filter((s) => {
         const e = String(s?.estado || '').toLowerCase();
         if (estado === 'todas') return true;
         if (estado === 'activa') return e === 'activa';
         if (estado === 'inactiva') return e === 'inactiva';
-        return e !== 'activa' && e !== 'inactiva'; // "otra"
+        return e !== 'activa' && e !== 'inactiva';
       });
+  }, [ultimas, termino, estado]);
 
-    // Incluye también empresas sin suscripción si el filtro lo permite
-    const sinSubIncluidas =
-      (estado === 'todas' || estado === 'inactiva' || estado === 'otra') // decide si aparecen
-        ? empresasSinSuscripcion.filter((e) => matchTexto(e?.nombre)).map((e) => ({
-            __noSub: true,
-            empresa: e,
-          }))
-        : [];
-
-    return { cards, sinSubIncluidas };
-  }, [ultimasSuscripciones, empresasSinSuscripcion, busqueda, estado]);
+  // Tarjetas sin suscripción (vista devuelve empresa_id, empresa_nombre)
+  // Enriquecemos con teléfono/dirección si están en /api/empresas
+  const tarjetasSinSub = useMemo(() => {
+    if (!(estado === 'todas' || estado === 'inactiva' || estado === 'otra')) return [];
+    const byId = new Map(empresas.map(e => [e.id, e]));
+    return sinSub
+      .filter((s) => matchTexto(s?.empresa_nombre))
+      .map((s) => {
+        const extra = byId.get(s.empresa_id);
+        return {
+          id: s.empresa_id,
+          nombre: s.empresa_nombre,
+          telefono: extra?.telefono || null,
+          direccion: extra?.direccion || null,
+        };
+      });
+  }, [sinSub, empresas, termino, estado]);
 
   const handleEmpresaClick = (empresaId) => {
     const seleccionada = empresas.find((e) => e.id === empresaId);
     setEmpresaSeleccionada(seleccionada || null);
   };
 
-  // --- Serie mensual general por empresa ---
-  const dataGrafica = useMemo(() => {
-    const map = new Map(); // mes -> { empresaNombre: count }
-    for (const sub of suscripciones) {
-      const mes = new Date(sub.fecha_inicio).toISOString().slice(0, 7); // YYYY-MM
-      const empresaNombre = sub?.empresa?.nombre || 'Desconocida';
-      if (!map.has(mes)) map.set(mes, {});
-      map.get(mes)[empresaNombre] = (map.get(mes)[empresaNombre] || 0) + 1;
-    }
-    const sorted = Array.from(map.entries()).sort(([a], [b]) => (a < b ? -1 : 1));
-    return sorted.map(([mes, obj]) => ({ mes, ...obj }));
-  }, [suscripciones]);
+  // --------- Gráfica mensual general (totales por mes) ----------
+  // vw_suscripciones_mensuales: anio, mes, total_suscripciones, total_ingresos
+  const dataGraficaGeneral = useMemo(() => {
+    return mensuales
+      .map(r => ({
+        mes: `${r.anio}-${pad2(r.mes)}`,
+        TotalSuscripciones: Number(r.total_suscripciones || 0),
+        TotalIngresos: Number(r.total_ingresos || 0),
+      }))
+      .sort((a, b) => (a.mes < b.mes ? -1 : 1));
+  }, [mensuales]);
 
-  const nombresEmpresas = useMemo(() => {
-    const set = new Set();
-    for (const sub of suscripciones) {
-      if (sub?.empresa?.nombre) set.add(sub.empresa.nombre);
-    }
-    return Array.from(set);
-  }, [suscripciones]);
-
-  // --- Serie individual para empresa seleccionada ---
+  // --------- Gráfica individual por empresa (histórico) ----------
   const dataEmpresaIndividual = useMemo(() => {
     if (!empresaSeleccionada) return [];
-    const map = new Map(); // mes -> total
-    for (const sub of suscripciones) {
-      const empresaId = sub?.empresa?.id ?? sub?.empresa_id;
-      if (empresaId !== empresaSeleccionada.id) continue;
-      const mes = new Date(sub.fecha_inicio).toISOString().slice(0, 7);
-      map.set(mes, (map.get(mes) || 0) + 1);
+    const map = new Map(); // 'YYYY-MM' -> total
+    for (const s of historico) {
+      const empresaIdPlano = s.empresa_id ?? s?.empresa?.id;
+      if (empresaIdPlano !== empresaSeleccionada.id) continue;
+      const dt = new Date(s.fecha_inicio);
+      if (isNaN(dt.getTime())) continue;
+      const key = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}`;
+      map.set(key, (map.get(key) || 0) + 1);
     }
     return Array.from(map.entries())
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([mes, Total]) => ({ mes, Total }));
-  }, [suscripciones, empresaSeleccionada]);
+  }, [historico, empresaSeleccionada]);
 
   return (
     <Box display="flex" minHeight="100vh" sx={{ background: 'linear-gradient(120deg, #1a2540 70%, #232E4F 100%)' }}>
@@ -310,14 +304,14 @@ const VisualizacionGraficas = () => {
             </Grid>
           ) : (
             <Grid container spacing={3}>
-              {/* Con suscripción */}
-              {listaTarjetas.cards.map((sub) => {
-                const empresaId = sub?.empresa?.id ?? sub?.empresa_id;
-                const empresaNombre = sub?.empresa?.nombre || 'Sin Empresa';
+              {/* Con suscripción (desde vw_panel_ultimas_suscripciones) */}
+              {tarjetasConSub.map((sub) => {
+                const empresaId = sub?.empresa_id;
+                const empresaNombre = sub?.empresa_nombre || 'Sin Empresa';
                 const estadoStr = String(sub?.estado || '').toLowerCase();
                 const sc = statusColor(estadoStr);
                 return (
-                  <Grid item xs={12} sm={6} md={4} key={`sub-${sub.id}`}>
+                  <Grid item xs={12} sm={6} md={4} key={`sub-${sub.suscripcion_id}`}>
                     <Paper
                       onClick={() => handleEmpresaClick(empresaId)}
                       elevation={6}
@@ -354,7 +348,7 @@ const VisualizacionGraficas = () => {
                       <Stack spacing={0.5}>
                         <Typography variant="body2" sx={{ color: '#cdd7f5' }}>
                           <BusinessIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 1 }} />
-                          Plan: <b>{sub?.plan?.nombre || 'Sin plan'}</b>
+                          Plan: <b>{sub?.plan_nombre || 'Sin plan'}</b>
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#cdd7f5' }}>
                           <CalendarTodayIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 1 }} />
@@ -370,11 +364,11 @@ const VisualizacionGraficas = () => {
                 );
               })}
 
-              {/* Sin suscripción (se muestran según filtro) */}
-              {listaTarjetas.sinSubIncluidas.map(({ empresa }) => (
-                <Grid item xs={12} sm={6} md={4} key={`no-sub-${empresa.id}`}>
+              {/* Sin suscripción */}
+              {tarjetasSinSub.map((empresa, idx) => (
+                <Grid item xs={12} sm={6} md={4} key={`no-sub-${empresa.id ?? empresa.empresa_id ?? idx}`}>
                   <Paper
-                    onClick={() => handleEmpresaClick(empresa.id)}
+                    onClick={() => handleEmpresaClick(empresa.id ?? empresa.empresa_id)}
                     elevation={4}
                     sx={{
                       cursor: 'pointer',
@@ -417,7 +411,7 @@ const VisualizacionGraficas = () => {
                 </Grid>
               ))}
 
-              {listaTarjetas.cards.length === 0 && listaTarjetas.sinSubIncluidas.length === 0 && (
+              {tarjetasConSub.length === 0 && tarjetasSinSub.length === 0 && (
                 <Grid item xs={12}>
                   <Paper sx={{ p: 3, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.06)', color: '#fff' }}>
                     <Typography>No hay resultados para los filtros aplicados.</Typography>
@@ -427,7 +421,7 @@ const VisualizacionGraficas = () => {
             </Grid>
           )}
 
-          {/* Gráfica mensual general */}
+          {/* Gráfica mensual general (totales) */}
           <Paper
             elevation={0}
             sx={{
@@ -441,14 +435,14 @@ const VisualizacionGraficas = () => {
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
               <Typography variant="h6" sx={{ color: '#fff' }}>
-                Historial mensual de suscripciones por empresa
+                Totales mensuales de suscripciones e ingresos
               </Typography>
               <TimelineIcon sx={{ color: '#9bb6ff' }} />
             </Stack>
 
             <Box sx={{ width: '100%', height: 420 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dataGrafica}>
+                <LineChart data={dataGraficaGeneral}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="mes" stroke="#cfd8ff" />
                   <YAxis allowDecimals={false} stroke="#cfd8ff" />
@@ -457,17 +451,24 @@ const VisualizacionGraficas = () => {
                     labelStyle={{ color: '#9bb6ff' }}
                   />
                   <Legend wrapperStyle={{ color: '#e6e9ef' }} />
-                  {nombresEmpresas.map((nombre, idx) => (
-                    <Line
-                      key={nombre}
-                      type="monotone"
-                      dataKey={nombre}
-                      stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                      strokeWidth={2}
-                      dot={{ r: 2.5 }}
-                      activeDot={{ r: 5 }}
-                    />
-                  ))}
+                  <Line
+                    type="monotone"
+                    dataKey="TotalSuscripciones"
+                    stroke={LINE_COLORS[0]}
+                    strokeWidth={2}
+                    dot={{ r: 2.5 }}
+                    activeDot={{ r: 5 }}
+                    name="Total Suscripciones"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="TotalIngresos"
+                    stroke={LINE_COLORS[1]}
+                    strokeWidth={2}
+                    dot={{ r: 2.5 }}
+                    activeDot={{ r: 5 }}
+                    name="Total Ingresos"
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </Box>

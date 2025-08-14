@@ -1,3 +1,4 @@
+// controllers/suscripcionesController.js
 const Suscripcion = require('../models/Suscripcion');
 const db = require('../config/db');
 
@@ -152,3 +153,52 @@ exports.getEstadoEmpresa = async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 };
+
+// GET /api/suscripciones/ultimas
+exports.getUltimasPorEmpresa = async (_req, res) => {
+  try {
+    // Coincide con las columnas reales de la vista
+    const [rows] = await db.query(`
+      SELECT
+        suscripcion_id,
+        empresa_id,
+        empresa_nombre,
+        empresa_telefono,
+        empresa_direccion,
+        plan_id,
+        plan_nombre,
+        plan_costo,
+        plan_lockers_incluidos,
+        fecha_inicio,
+        fecha_fin,
+        estado
+      FROM vw_panel_ultimas_suscripciones
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error('getUltimasPorEmpresa SQL error:', err.sqlMessage || err.message);
+    res.status(500).json({ error: 'Error al obtener últimas suscripciones por empresa' });
+  }
+};
+
+// GET /api/suscripciones/mensuales
+exports.getMensuales = async (_req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT anio, mes, total_suscripciones, total_ingresos
+      FROM vw_suscripciones_mensuales
+      ORDER BY anio, mes
+    `);
+    const data = rows.map(r => ({
+      anio: Number(r.anio),
+      mes: Number(r.mes),
+      total_suscripciones: Number(r.total_suscripciones || 0),
+      total_ingresos: Number(r.total_ingresos || 0),
+    }));
+    res.json(data);
+  } catch (err) {
+    console.error('getMensuales SQL error:', err.sqlMessage || err.message);
+    res.status(500).json({ error: 'Error al obtener serie mensual' });
+  }
+};
+
