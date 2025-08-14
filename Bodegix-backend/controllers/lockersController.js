@@ -1,5 +1,6 @@
 const Locker = require('../models/Locker');
 const { Usuario } = require('../models');
+const { UniqueConstraintError } = require('sequelize');
 
 exports.getLockers = async (req, res) => {
   try {
@@ -11,61 +12,101 @@ exports.getLockers = async (req, res) => {
 };
 
 exports.createLocker = async (req, res) => {
+  const {
+    ubicacion,
+    estado = 'activo',
+    tipo = 'no_perecederos',
+    empresa_id,
+    usuario_id = null,
+    temp_min = null,
+    temp_max = null,
+    hum_min = null,
+    hum_max = null,
+    peso_max = null
+  } = req.body;
+
+  const sequelize = Locker.sequelize;
+
   try {
-    const {
-      ubicacion,
-      estado,
-      tipo,
-      empresa_id,
-      usuario_id,
-      temp_min,
-      temp_max,
-      hum_min,
-      hum_max,
-      peso_max
-    } = req.body;
+    const result = await sequelize.transaction(async (t) => {
+      const [rows] = await sequelize.query(
+        `
+          SELECT COALESCE(MAX(CAST(identificador AS UNSIGNED)), 0) AS max_n
+          FROM lockers
+          WHERE empresa_id = ?
+        `,
+        { replacements: [empresa_id], transaction: t }
+      );
 
-    // Buscar el último locker de esta empresa
-    const ultimoLocker = await Locker.findOne({
-      where: { empresa_id },
-      order: [['id', 'DESC']] // último creado
+      const maxN = rows?.[0]?.max_n ?? 0;
+      const siguienteN = Number(maxN) + 1;
+      const identificador = String(siguienteN).padStart(3, '0');
+
+      const locker = await Locker.create({
+        identificador,
+        ubicacion,
+        estado,
+        tipo,
+        empresa_id,
+        usuario_id,
+        temp_min,
+        temp_max,
+        hum_min,
+        hum_max,
+        peso_max
+      }, { transaction: t });
+
+      return locker;
     });
 
-    // Calcular el siguiente identificador
-    let siguienteId = 1;
-    if (ultimoLocker) {
-      siguienteId = parseInt(ultimoLocker.identificador, 10) + 1;
-    }
-
-    // Formatear con ceros a la izquierda (001, 002, 003...)
-    const identificador = String(siguienteId).padStart(3, '0');
-
-    const locker = await Locker.create({
-      identificador,
-      ubicacion,
-      estado,
-      tipo,
-      empresa_id,
-      usuario_id,
-      temp_min,
-      temp_max,
-      hum_min,
-      hum_max,
-      peso_max
-    });
-
-    res.status(201).json(locker);
+    return res.status(201).json(result);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (error instanceof UniqueConstraintError) {
+      try {
+        const retry = await Locker.sequelize.transaction(async (t) => {
+          const [rows] = await Locker.sequelize.query(
+            `
+              SELECT COALESCE(MAX(CAST(identificador AS UNSIGNED)), 0) AS max_n
+              FROM lockers
+              WHERE empresa_id = ?
+            `,
+            { replacements: [req.body.empresa_id], transaction: t }
+          );
+          const maxN = rows?.[0]?.max_n ?? 0;
+          const siguienteN = Number(maxN) + 1;
+          const identificador = String(siguienteN).padStart(3, '0');
+
+          const locker = await Locker.create({
+            identificador,
+            ubicacion,
+            estado,
+            tipo,
+            empresa_id,
+            usuario_id,
+            temp_min,
+            temp_max,
+            hum_min,
+            hum_max,
+            peso_max
+          }, { transaction: t });
+
+          return locker;
+        });
+
+        return res.status(201).json(retry);
+      } catch (e2) {
+        return res.status(500).json({ error: e2.message });
+      }
+    }
+    return res.status(500).json({ error: error.message });
   }
 };
-
 
 exports.updateLocker = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      identificador,
+      // OJO: NO permitimos cambiar 'identificador' desde el body
       ubicacion,
       estado,
       tipo,
@@ -79,7 +120,6 @@ exports.updateLocker = async (req, res) => {
     } = req.body;
 
     const [updated] = await Locker.update({
-      identificador,
       ubicacion,
       estado,
       tipo,

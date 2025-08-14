@@ -1,16 +1,55 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Grid, Paper, Typography, Button, FormControl, InputLabel, Stack, TextField, MenuItem, Select
+  Box,
+  Grid,
+  Paper,
+  Typography,
+  Button,
+  FormControl,
+  InputLabel,
+  Stack,
+  TextField,
+  MenuItem,
+  Select,
+  Chip,
+  Divider,
 } from '@mui/material';
 import {
   Lock as LockerIcon,
-  PowerSettingsNew as EstadoIcon, Edit as EditIcon, Delete as DeleteIcon
+  PowerSettingsNew as EstadoIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Place as PlaceIcon,
+  Category as CategoryIcon,
+  Person as PersonIcon,
+  Save as SaveIcon,
 } from '@mui/icons-material';
 import Sidebar from '../../components/Layout/Sidebar';
-import Topbar from '../../components/Layout/Topbar';
 import { jwtDecode } from 'jwt-decode';
 
-const API_URL = "http://localhost:5000";
+const API_URL = 'http://localhost:5000';
+
+// Paleta para mejor contraste con tu fondo oscuro existente
+const palette = {
+  cardBg: '#1e293b',            // slate-800
+  cardBgInactive: '#2b1f24',    // rojo vino oscuro para inactivos
+  text: '#e5e7eb',              // slate-200
+  subText: 'rgba(229,231,235,0.75)',
+  borderActive: '#22c55e',      // verde
+  borderInactive: '#f43f5e',    // rojo
+  chipActiveBg: '#052e16',
+  chipActiveText: '#86efac',
+  chipInactiveBg: '#3f1d26',
+  chipInactiveText: '#fecaca',
+  fieldBg: 'rgba(255,255,255,0.06)',
+  fieldBorder: 'rgba(255,255,255,0.18)',
+  fieldFocus: '#60a5fa',        // azul focus
+  btnDanger: '#f87171',
+  btnDangerHover: '#dc2626',
+  btnSuccess: '#4ade80',
+  btnSuccessHover: '#22c55e',
+  btnOutline: 'rgba(255,255,255,0.65)',
+};
 
 const LockersPage = () => {
   const [lockers, setLockers] = useState([]);
@@ -23,7 +62,6 @@ const LockersPage = () => {
     const storedToken = localStorage.getItem('token');
     if (!storedToken) return;
     const decoded = jwtDecode(storedToken);
-    // Asegura tipo consistente para comparaciones
     setEmpresaId(Number(decoded.empresa_id));
     setToken(storedToken);
   }, []);
@@ -34,7 +72,7 @@ const LockersPage = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      const filtered = data.filter(l => Number(l.empresa_id) === Number(empresaId));
+      const filtered = data.filter((l) => Number(l.empresa_id) === Number(empresaId));
       setLockers(filtered);
     } catch (error) {
       console.error('Error al obtener lockers:', error);
@@ -43,14 +81,12 @@ const LockersPage = () => {
 
   const fetchEmpleados = async () => {
     try {
-      // Si tu backend respeta el query rol_id=3, igual vuelvo a filtrar por seguridad
       const res = await fetch(`${API_URL}/api/usuarios?rol_id=3`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      const filtered = data.filter(emp =>
-        Number(emp.empresa_id) === Number(empresaId) &&
-        String(emp.rol_id) === '3'
+      const filtered = data.filter(
+        (emp) => Number(emp.empresa_id) === Number(empresaId) && String(emp.rol_id) === '3'
       );
       setEmpleados(filtered);
     } catch (error) {
@@ -65,10 +101,9 @@ const LockersPage = () => {
     }
   }, [empresaId, token]);
 
-  // Solo válidos si están en la lista de empleados (ya filtrada a rol_id 3)
   const isEmpleadoValido = (usuarioId) => {
     if (usuarioId === null || usuarioId === undefined || usuarioId === '') return false;
-    return empleados.some(e => Number(e.id) === Number(usuarioId));
+    return empleados.some((e) => Number(e.id) === Number(usuarioId));
   };
 
   const handleUpdateLocker = async (lockerId, values) => {
@@ -91,23 +126,6 @@ const LockersPage = () => {
     }
   };
 
-  const handleDeleteLocker = async (lockerId) => {
-    if (!window.confirm('¿Seguro que deseas eliminar este locker?')) return;
-    try {
-      const res = await fetch(`${API_URL}/api/lockers/${lockerId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || 'Error al eliminar locker');
-      }
-      fetchLockers();
-    } catch (error) {
-      console.error('Error al eliminar locker:', error.message);
-    }
-  };
-
   const handleChange = (lockerId, field, value) => {
     setEditValues((prev) => ({
       ...prev,
@@ -118,15 +136,51 @@ const LockersPage = () => {
     }));
   };
 
+  // Estilos reutilizables para los TextField (mejor legibilidad en oscuro)
+  const fieldSx = {
+    '& .MuiInputBase-root': {
+      bgcolor: palette.fieldBg,
+      color: palette.text,
+      borderRadius: 2,
+    },
+    '& .MuiOutlinedInput-notchedOutline': {
+      borderColor: palette.fieldBorder,
+    },
+    '&:hover .MuiOutlinedInput-notchedOutline': {
+      borderColor: palette.text,
+      opacity: 0.7,
+    },
+    '& .MuiInputLabel-root': {
+      color: palette.subText,
+    },
+    '& .MuiInputLabel-root.Mui-focused': {
+      color: palette.fieldFocus,
+    },
+    '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
+      borderColor: palette.fieldFocus,
+    },
+  };
+
   return (
     <Box display="flex">
       <Sidebar />
       <Box flexGrow={1} p={3}>
-        <Topbar title="Gestión de Lockers" />
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6">Lockers por Empresa</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Edita, asigna, administra y elimina lockers.
+        {/* Encabezado de página */}
+        <Paper
+          sx={{
+            p: 3,
+            mb: 3,
+            bgcolor: '#0f172a', // un poco más claro que el fondo pero sin cambiar el fondo global
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: palette.text,
+            borderRadius: 3,
+          }}
+        >
+          <Typography variant="h5" fontWeight={700}>
+            Gestión de Lockers
+          </Typography>
+          <Typography variant="body2" sx={{ color: palette.subText, mt: 0.5 }}>
+            Edita, asigna y administra lockers.
           </Typography>
         </Paper>
 
@@ -134,46 +188,116 @@ const LockersPage = () => {
           {lockers.map((locker) => {
             const isActivo = locker.estado === 'activo';
             const edit = editValues[locker.id] || {};
-
-            // usuario_id actual considerando edición
             const usuarioSeleccionado =
-              edit.usuario_id !== undefined ? edit.usuario_id : (locker.usuario_id ?? null);
+              edit.usuario_id !== undefined ? edit.usuario_id : locker.usuario_id ?? null;
 
             return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={locker.id}>
+              <Grid item xs={12} md={6} lg={6} key={locker.id}>
                 <Paper
                   sx={{
-                    p: 2,
+                    p: 2.5,
                     borderRadius: 3,
-                    backgroundColor: isActivo ? '#f1f8e9' : '#ffebee',
-                    border: `2px solid ${isActivo ? '#43a047' : '#e53935'}`,
-                    boxShadow: 4,
+                    bgcolor: isActivo ? palette.cardBg : palette.cardBgInactive,
+                    border: `2px solid ${isActivo ? palette.borderActive : palette.borderInactive}`,
+                    boxShadow: '0 10px 28px rgba(0,0,0,0.35)',
+                    color: palette.text,
                   }}
                 >
-                  <Stack spacing={1}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <LockerIcon color={isActivo ? 'success' : 'error'} />
-                      <TextField
-                        size="small"
-                        label="Identificador"
-                        fullWidth
-                        value={locker.identificador}
-                        InputProps={{ readOnly: true }}
+                  {/* Header del locker */}
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    sx={{ mb: 1.5 }}
+                  >
+                    <Stack direction="row" spacing={1.2} alignItems="center">
+                      <LockerIcon
+                        fontSize="small"
+                        sx={{
+                          color: isActivo ? palette.borderActive : palette.borderInactive,
+                        }}
                       />
+                      <Typography variant="h6" fontWeight={700}>
+                        Locker {locker.identificador}
+                      </Typography>
                     </Stack>
 
+                    <Chip
+                      size="small"
+                      label={isActivo ? 'Activo' : 'Inactivo'}
+                      sx={{
+                        bgcolor: isActivo ? palette.chipActiveBg : palette.chipInactiveBg,
+                        color: isActivo ? palette.chipActiveText : palette.chipInactiveText,
+                        border: `1px solid ${
+                          isActivo ? palette.borderActive : palette.borderInactive
+                        }`,
+                      }}
+                    />
+                  </Stack>
+
+                  {/* Badges de info rápida */}
+                  <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap">
+                    {locker.ubicacion && (
+                      <Chip
+                        icon={<PlaceIcon />}
+                        label={locker.ubicacion}
+                        size="small"
+                        sx={{
+                          color: palette.text,
+                          borderColor: palette.fieldBorder,
+                          bgcolor: 'transparent',
+                          border: `1px dashed ${palette.fieldBorder}`,
+                        }}
+                        variant="outlined"
+                      />
+                    )}
+                    {locker.tipo && (
+                      <Chip
+                        icon={<CategoryIcon />}
+                        label={locker.tipo}
+                        size="small"
+                        sx={{
+                          color: palette.text,
+                          borderColor: palette.fieldBorder,
+                          bgcolor: 'transparent',
+                          border: `1px dashed ${palette.fieldBorder}`,
+                        }}
+                        variant="outlined"
+                      />
+                    )}
+                    <Chip
+                      icon={<PersonIcon />}
+                      label={
+                        usuarioSeleccionado ? `Empleado #${usuarioSeleccionado}` : 'Sin asignar'
+                      }
+                      size="small"
+                      sx={{
+                        color: palette.text,
+                        borderColor: palette.fieldBorder,
+                        bgcolor: 'transparent',
+                        border: `1px dashed ${palette.fieldBorder}`,
+                      }}
+                      variant="outlined"
+                    />
+                  </Stack>
+
+                  <Divider sx={{ mb: 2, borderColor: 'rgba(255,255,255,0.08)' }} />
+
+                  {/* Campos */}
+                  <Stack spacing={1.25}>
                     <TextField
                       size="small"
                       label="Ubicación"
                       fullWidth
-                      value={edit.ubicacion ?? locker.ubicacion}
+                      value={edit.ubicacion ?? locker.ubicacion ?? ''}
                       onChange={(e) => handleChange(locker.id, 'ubicacion', e.target.value)}
+                      sx={fieldSx}
                     />
 
-                    <FormControl size="small" fullWidth>
+                    <FormControl size="small" fullWidth sx={fieldSx}>
                       <InputLabel>Tipo</InputLabel>
                       <Select
-                        value={edit.tipo ?? locker.tipo}
+                        value={edit.tipo ?? locker.tipo ?? ''}
                         label="Tipo"
                         onChange={(e) => handleChange(locker.id, 'tipo', e.target.value)}
                       >
@@ -183,7 +307,7 @@ const LockersPage = () => {
                       </Select>
                     </FormControl>
 
-                    <FormControl size="small" fullWidth>
+                    <FormControl size="small" fullWidth sx={fieldSx}>
                       <InputLabel>Empleado</InputLabel>
                       <Select
                         value={
@@ -194,9 +318,10 @@ const LockersPage = () => {
                         label="Empleado"
                         onChange={(e) => {
                           const val = e.target.value === '' ? null : Number(e.target.value);
-                          // Si selecciona alguien fuera de la lista, no lo permitimos
                           if (val !== null && !isEmpleadoValido(val)) {
-                            alert('Solo puedes asignar empleados con rol Trabajador (rol_id = 3) de tu empresa.');
+                            alert(
+                              'Solo puedes asignar empleados con rol Trabajador (rol_id = 3) de tu empresa.'
+                            );
                             return;
                           }
                           handleChange(locker.id, 'usuario_id', val);
@@ -213,119 +338,145 @@ const LockersPage = () => {
                       </Select>
                     </FormControl>
 
-                    <TextField
-                      size="small"
-                      label="Temp. Mínima (°C)"
-                      type="number"
-                      fullWidth
-                      value={edit.temp_min ?? locker.temp_min ?? ''}
-                      onChange={(e) => handleChange(locker.id, 'temp_min', parseFloat(e.target.value))}
-                    />
-                    <TextField
-                      size="small"
-                      label="Temp. Máxima (°C)"
-                      type="number"
-                      fullWidth
-                      value={edit.temp_max ?? locker.temp_max ?? ''}
-                      onChange={(e) => handleChange(locker.id, 'temp_max', parseFloat(e.target.value))}
-                    />
-                    <TextField
-                      size="small"
-                      label="Humedad Mínima (%)"
-                      type="number"
-                      fullWidth
-                      value={edit.hum_min ?? locker.hum_min ?? ''}
-                      onChange={(e) => handleChange(locker.id, 'hum_min', parseFloat(e.target.value))}
-                    />
-                    <TextField
-                      size="small"
-                      label="Humedad Máxima (%)"
-                      type="number"
-                      fullWidth
-                      value={edit.hum_max ?? locker.hum_max ?? ''}
-                      onChange={(e) => handleChange(locker.id, 'hum_max', parseFloat(e.target.value))}
-                    />
+                    <Stack direction="row" spacing={1.25}>
+                      <TextField
+                        size="small"
+                        label="Temp. Mínima (°C)"
+                        type="number"
+                        fullWidth
+                        value={edit.temp_min ?? locker.temp_min ?? ''}
+                        onChange={(e) =>
+                          handleChange(locker.id, 'temp_min', parseFloat(e.target.value))
+                        }
+                        sx={fieldSx}
+                      />
+                      <TextField
+                        size="small"
+                        label="Temp. Máxima (°C)"
+                        type="number"
+                        fullWidth
+                        value={edit.temp_max ?? locker.temp_max ?? ''}
+                        onChange={(e) =>
+                          handleChange(locker.id, 'temp_max', parseFloat(e.target.value))
+                        }
+                        sx={fieldSx}
+                      />
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.25}>
+                      <TextField
+                        size="small"
+                        label="Humedad Mínima (%)"
+                        type="number"
+                        fullWidth
+                        value={edit.hum_min ?? locker.hum_min ?? ''}
+                        onChange={(e) =>
+                          handleChange(locker.id, 'hum_min', parseFloat(e.target.value))
+                        }
+                        sx={fieldSx}
+                      />
+                      <TextField
+                        size="small"
+                        label="Humedad Máxima (%)"
+                        type="number"
+                        fullWidth
+                        value={edit.hum_max ?? locker.hum_max ?? ''}
+                        onChange={(e) =>
+                          handleChange(locker.id, 'hum_max', parseFloat(e.target.value))
+                        }
+                        sx={fieldSx}
+                      />
+                    </Stack>
+
                     <TextField
                       size="small"
                       label="Peso Máximo (kg)"
                       type="number"
                       fullWidth
                       value={edit.peso_max ?? locker.peso_max ?? ''}
-                      onChange={(e) => handleChange(locker.id, 'peso_max', parseFloat(e.target.value))}
+                      onChange={(e) =>
+                        handleChange(locker.id, 'peso_max', parseFloat(e.target.value))
+                      }
+                      sx={fieldSx}
                     />
+                  </Stack>
 
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        startIcon={<EstadoIcon />}
-                        variant="contained"
-                        color={isActivo ? 'error' : 'success'}
-                        onClick={() => {
-                          // Para activar, exige un empleado válido (rol 3)
-                          const targetUsuarioId =
-                            edit.usuario_id !== undefined ? edit.usuario_id : (locker.usuario_id ?? null);
+                  {/* Acciones */}
+                  <Stack direction="row" spacing={1.25} sx={{ mt: 2 }}>
+                    <Button
+                      startIcon={<EstadoIcon />}
+                      variant="contained"
+                      sx={{
+                        bgcolor: isActivo ? palette.btnDanger : palette.btnSuccess,
+                        '&:hover': {
+                          bgcolor: isActivo ? palette.btnDangerHover : palette.btnSuccessHover,
+                        },
+                        color: '#fff',
+                        fontWeight: 700,
+                      }}
+                      onClick={() => {
+                        const targetUsuarioId =
+                          edit.usuario_id !== undefined ? edit.usuario_id : locker.usuario_id ?? null;
 
-                          if (!isActivo) {
-                            // Vamos a activar
-                            if (!isEmpleadoValido(targetUsuarioId)) {
-                              alert('Para activar el locker debes asignar un empleado con rol_id = 3.');
-                              return;
-                            }
-                          }
-
-                          handleUpdateLocker(locker.id, {
-                            estado: isActivo ? 'inactivo' : 'activo',
-                            // Si desactivamos, opcionalmente podrías dejar la asignación; aquí no la tocamos
-                            usuario_id: targetUsuarioId ?? null,
-                          });
-                        }}
-                      >
-                        {isActivo ? 'Desactivar' : 'Activar'}
-                      </Button>
-
-                      <Button
-                        startIcon={<EditIcon />}
-                        variant="outlined"
-                        onClick={() => {
-                          const updatedUsuarioId =
-                            edit.usuario_id !== undefined ? edit.usuario_id : (locker.usuario_id ?? null);
-
-                          // Si pretende guardar con usuario asignado, validar que sea rol 3
-                          if (updatedUsuarioId !== null && !isEmpleadoValido(updatedUsuarioId)) {
-                            alert('Solo puedes asignar empleados con rol_id = 3.');
+                        if (!isActivo) {
+                          if (!isEmpleadoValido(targetUsuarioId)) {
+                            alert(
+                              'Para activar el locker debes asignar un empleado con rol_id = 3.'
+                            );
                             return;
                           }
+                        }
 
-                          const valuesToUpdate = {
-                            ubicacion: edit.ubicacion ?? locker.ubicacion,
-                            tipo: edit.tipo ?? locker.tipo,
-                            usuario_id: updatedUsuarioId, // puede ser null
-                            temp_min: edit.temp_min ?? locker.temp_min,
-                            temp_max: edit.temp_max ?? locker.temp_max,
-                            hum_min: edit.hum_min ?? locker.hum_min,
-                            hum_max: edit.hum_max ?? locker.hum_max,
-                            peso_max: edit.peso_max ?? locker.peso_max,
-                          };
+                        handleUpdateLocker(locker.id, {
+                          estado: isActivo ? 'inactivo' : 'activo',
+                          usuario_id: targetUsuarioId ?? null,
+                        });
+                      }}
+                    >
+                      {isActivo ? 'Desactivar' : 'Activar'}
+                    </Button>
 
-                          // Si queda sin asignar, lo forzamos a inactivo
-                          if (updatedUsuarioId === null) {
-                            valuesToUpdate.estado = 'inactivo';
-                          }
+                    <Button
+                      startIcon={<SaveIcon />}
+                      variant="outlined"
+                      sx={{
+                        borderColor: palette.btnOutline,
+                        color: palette.text,
+                        '&:hover': {
+                          borderColor: palette.text,
+                          bgcolor: 'rgba(255,255,255,0.08)',
+                        },
+                        fontWeight: 700,
+                      }}
+                      onClick={() => {
+                        const updatedUsuarioId =
+                          edit.usuario_id !== undefined ? edit.usuario_id : locker.usuario_id ?? null;
 
-                          handleUpdateLocker(locker.id, valuesToUpdate);
-                        }}
-                      >
-                        Guardar cambios
-                      </Button>
+                        if (updatedUsuarioId !== null && !isEmpleadoValido(updatedUsuarioId)) {
+                          alert('Solo puedes asignar empleados con rol_id = 3.');
+                          return;
+                        }
 
-                      <Button
-                        startIcon={<DeleteIcon />}
-                        variant="outlined"
-                        color="error"
-                        onClick={() => handleDeleteLocker(locker.id)}
-                      >
-                        Eliminar
-                      </Button>
-                    </Stack>
+                        const valuesToUpdate = {
+                          ubicacion: edit.ubicacion ?? locker.ubicacion,
+                          tipo: edit.tipo ?? locker.tipo,
+                          usuario_id: updatedUsuarioId,
+                          temp_min: edit.temp_min ?? locker.temp_min,
+                          temp_max: edit.temp_max ?? locker.temp_max,
+                          hum_min: edit.hum_min ?? locker.hum_min,
+                          hum_max: edit.hum_max ?? locker.hum_max,
+                          peso_max: edit.peso_max ?? locker.peso_max,
+                        };
+
+                        if (updatedUsuarioId === null) {
+                          valuesToUpdate.estado = 'inactivo';
+                        }
+
+                        handleUpdateLocker(locker.id, valuesToUpdate);
+                      }}
+                    >
+                      Guardar
+                    </Button>
                   </Stack>
                 </Paper>
               </Grid>

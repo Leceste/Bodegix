@@ -1,5 +1,4 @@
 // src/pages/cliente/SettingsPage.jsx
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
   Box,
@@ -8,27 +7,48 @@ import {
   TextField,
   Button,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Stack,
+  Avatar,
+  Divider,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
 import Sidebar from '../../components/Layout/Sidebar';
-import Topbar from '../../components/Layout/Topbar';
 import { AuthContext } from '../../context/AuthContext';
 import { jwtDecode } from 'jwt-decode';
+
+// Icons
+import PersonIcon from '@mui/icons-material/Person';
+import EmailIcon from '@mui/icons-material/Email';
+import LockIcon from '@mui/icons-material/Lock';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import SaveIcon from '@mui/icons-material/Save';
 
 const SettingsPage = () => {
   const { user } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     nombre: '',
     correo: '',
-    contraseña: ''
+    contraseña: '',
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+  const [showPass, setShowPass] = useState(false);
 
-  const token = localStorage.getItem('token');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const decoded = token ? jwtDecode(token) : null;
   const userId = decoded?.id;
+
+  // Iniciales para el avatar
+  const initials = (formData.nombre || decoded?.nombre || 'U')
+    .split(' ')
+    .map(p => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -36,14 +56,14 @@ const SettingsPage = () => {
       setLoading(true);
       try {
         const res = await fetch(`/api/usuarios/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error('No se pudo obtener usuario');
         const data = await res.json();
         setFormData({
           nombre: data.nombre || '',
           correo: data.correo || '',
-          contraseña: ''
+          contraseña: '',
         });
       } catch (err) {
         setError('Error al cargar datos del usuario.');
@@ -55,7 +75,7 @@ const SettingsPage = () => {
   }, [userId, token]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     setMessage(null);
     setError(null);
   };
@@ -70,18 +90,20 @@ const SettingsPage = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       });
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Error al actualizar usuario');
       }
       await res.json();
       setMessage('Datos actualizados correctamente.');
+      // Limpia la contraseña tras guardar
+      setFormData(prev => ({ ...prev, contraseña: '' }));
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Error al actualizar usuario.');
     } finally {
       setLoading(false);
     }
@@ -90,57 +112,198 @@ const SettingsPage = () => {
   return (
     <Box display="flex" minHeight="100vh">
       <Sidebar />
+
       <Box flexGrow={1} p={3}>
-        <Topbar title="Configuración de Usuario" />
-        <Paper sx={{ p: 3, maxWidth: 600, mx: 'auto' }}>
-          <Typography variant="h6" gutterBottom>
-            Ajustes de Perfil
-          </Typography>
-
-          {loading && <CircularProgress sx={{ mb: 2 }} />}
-          {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-          <form onSubmit={handleSubmit}>
-            <TextField
-              label="Nombre"
-              name="nombre"
-              value={formData.nombre}
-              onChange={handleChange}
-              fullWidth
-              required
-              margin="normal"
-            />
-            <TextField
-              label="Correo"
-              name="correo"
-              type="email"
-              value={formData.correo}
-              onChange={handleChange}
-              fullWidth
-              required
-              margin="normal"
-            />
-            <TextField
-              label="Contraseña (dejar vacío para no cambiar)"
-              name="contraseña"
-              type="password"
-              value={formData.contraseña}
-              onChange={handleChange}
-              fullWidth
-              margin="normal"
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              sx={{ mt: 3 }}
-              disabled={loading}
-              fullWidth
+        <Paper
+          elevation={0}
+          sx={{
+            mx: 'auto',
+            p: { xs: 2.5, md: 3.5 },
+            maxWidth: 720,
+            borderRadius: 3,
+            backgroundColor: '#111a2b',              // tarjeta oscura (contrasta con tu fondo)
+            border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header de la tarjeta */}
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+            <Avatar
+              sx={{
+                width: 56,
+                height: 56,
+                fontWeight: 800,
+                bgcolor: '#4fc3f7',
+                color: '#0b1a2b',
+                boxShadow: '0 6px 18px rgba(79,195,247,0.35)',
+              }}
             >
-              Guardar Cambios
-            </Button>
-          </form>
+              {initials}
+            </Avatar>
+            <Box>
+              <Typography variant="h6" sx={{ color: '#fff', fontWeight: 800, letterSpacing: 0.2 }}>
+                Ajustes de perfil
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                Actualiza tu información personal y credenciales.
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mb: 3 }} />
+
+          {message && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {message}
+            </Alert>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={handleSubmit} noValidate>
+            <Stack spacing={2.2}>
+              {/* Nombre */}
+              <TextField
+                label="Nombre"
+                name="nombre"
+                value={formData.nombre}
+                onChange={handleChange}
+                required
+                fullWidth
+                InputLabelProps={{ sx: { color: '#cfe3ff' } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <PersonIcon sx={{ color: '#bcd2ff' }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#e6e9ef',
+                    bgcolor: '#0f172a',
+                    borderRadius: 2,
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                    '&:hover fieldset': { borderColor: '#4fc3f7' },
+                    '&.Mui-focused fieldset': { borderColor: '#4fc3f7', boxShadow: '0 0 0 2px rgba(79,195,247,0.25)' },
+                  },
+                }}
+              />
+
+              {/* Correo */}
+              <TextField
+                label="Correo"
+                name="correo"
+                type="email"
+                value={formData.correo}
+                onChange={handleChange}
+                required
+                fullWidth
+                InputLabelProps={{ sx: { color: '#cfe3ff' } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <EmailIcon sx={{ color: '#bcd2ff' }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#e6e9ef',
+                    bgcolor: '#0f172a',
+                    borderRadius: 2,
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                    '&:hover fieldset': { borderColor: '#4fc3f7' },
+                    '&.Mui-focused fieldset': { borderColor: '#4fc3f7', boxShadow: '0 0 0 2px rgba(79,195,247,0.25)' },
+                  },
+                }}
+              />
+
+              {/* Contraseña */}
+              <TextField
+                label="Contraseña (dejar vacío para no cambiar)"
+                name="contraseña"
+                type={showPass ? 'text' : 'password'}
+                value={formData.contraseña}
+                onChange={handleChange}
+                fullWidth
+                InputLabelProps={{ sx: { color: '#cfe3ff' } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockIcon sx={{ color: '#bcd2ff' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPass(s => !s)}
+                        edge="end"
+                        sx={{ color: '#bcd2ff' }}
+                        aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      >
+                        {showPass ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#e6e9ef',
+                    bgcolor: '#0f172a',
+                    borderRadius: 2,
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                    '&:hover fieldset': { borderColor: '#4fc3f7' },
+                    '&.Mui-focused fieldset': { borderColor: '#4fc3f7', boxShadow: '0 0 0 2px rgba(79,195,247,0.25)' },
+                  },
+                }}
+              />
+            </Stack>
+
+            <Stack direction="row" justifyContent="flex-end" spacing={1.5} sx={{ mt: 3 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                startIcon={<SaveIcon />}
+                disabled={loading}
+                sx={{
+                  px: 3,
+                  py: 1.1,
+                  fontWeight: 800,
+                  letterSpacing: 0.3,
+                  background: 'linear-gradient(135deg, #4fc3f7, #29b6f6)',
+                  color: '#0b1a2b',
+                  '&:hover': { filter: 'brightness(1.05)' },
+                }}
+              >
+                {loading ? <CircularProgress size={20} sx={{ color: '#0b1a2b' }} /> : 'Guardar cambios'}
+              </Button>
+            </Stack>
+          </Box>
+
+          {/* Loader fino en la esquina para estados de carga cortos */}
+          {loading && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: 3,
+                width: '100%',
+                background:
+                  'linear-gradient(90deg, rgba(79,195,247,0) 0%, rgba(79,195,247,0.9) 50%, rgba(79,195,247,0) 100%)',
+                animation: 'shine 1.6s linear infinite',
+                '@keyframes shine': {
+                  '0%': { transform: 'translateX(-100%)' },
+                  '100%': { transform: 'translateX(100%)' },
+                },
+              }}
+            />
+          )}
         </Paper>
       </Box>
     </Box>

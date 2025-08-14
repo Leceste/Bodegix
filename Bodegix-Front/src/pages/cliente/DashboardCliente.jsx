@@ -1,170 +1,415 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Grid, Typography, Paper, Divider } from '@mui/material';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Grid,
+  Typography,
+  Paper,
+  Divider,
+  Skeleton,
+  Alert,
+  Button,
+  Chip,
+  LinearProgress,
+  Stack,
+  IconButton,
+  CircularProgress,
+  alpha,
+} from '@mui/material';
 import {
   People as PeopleIcon,
   Lock as LockersIcon,
   Assignment as AssignmentIcon,
   Storage as StorageIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import Sidebar from '../../components/Layout/Sidebar';
-import Topbar from '../../components/Layout/Topbar';
 import { jwtDecode } from 'jwt-decode';
 
-const DashboardCliente = () => {
+const API_URL = import.meta?.env?.VITE_API_URL || 'http://localhost:5000';
+
+/* ---------- pequeño contador animado sin librerías ---------- */
+const useCountUp = (value, duration = 600) => {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf;
+    const start = performance.now();
+    const from = display;
+    const delta = value - from;
+    const step = (t) => {
+      const p = Math.min(1, (t - start) / duration);
+      setDisplay(Math.round(from + delta * p));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return display;
+};
+
+/* ---------- subcomponentes UI ---------- */
+function StatCard({ icon, label, value, gradient }) {
+  const num = useCountUp(value);
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 4,
+        minHeight: 170,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#fff',
+        position: 'relative',
+        background: gradient,
+        overflow: 'hidden',
+        boxShadow: '0 10px 30px rgba(0,0,0,.18)',
+        transition: 'transform .18s ease, box-shadow .18s ease',
+        '&:hover': { transform: 'translateY(-3px)', boxShadow: '0 18px 50px rgba(0,0,0,.22)' },
+        '&:before': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(60rem 20rem at -10% -20%, rgba(255,255,255,.18), transparent 45%)',
+          pointerEvents: 'none',
+        },
+      }}
+    >
+      <Box sx={{ mb: 1, opacity: 0.95 }}>{icon}</Box>
+      <Typography variant="h3" fontWeight={800} sx={{ lineHeight: 1 }}>
+        {num}
+      </Typography>
+      <Typography variant="subtitle1" sx={{ opacity: 0.95 }}>
+        {label}
+      </Typography>
+    </Paper>
+  );
+}
+
+function OccupancyCard({ asignados, total, ocupacion, onRefresh }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={(theme) => ({
+        p: 2.5,
+        borderRadius: 3,
+        minWidth: 320,
+        color: '#fff',
+        background: alpha('#ffffff', 0.08),
+        border: `1px solid ${alpha('#ffffff', 0.18)}`,
+        backdropFilter: 'blur(6px)',
+        boxShadow: '0 10px 30px rgba(0,0,0,.18)',
+      })}
+    >
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.9 }}>
+          Ocupación de lockers
+        </Typography>
+        <IconButton size="small" onClick={onRefresh} sx={{ color: '#fff' }} title="Refrescar">
+          <RefreshIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+
+      <Stack direction="row" spacing={2} alignItems="center">
+        <Box position="relative" display="inline-flex">
+          <CircularProgress
+            variant="determinate"
+            value={ocupacion}
+            thickness={5}
+            size={68}
+            sx={{ color: '#fff' }}
+          />
+          <Box
+            sx={{
+              top: 0,
+              left: 0,
+              bottom: 0,
+              right: 0,
+              position: 'absolute',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Typography variant="subtitle2" component="div" color="#0b1220" fontWeight={800}>
+              {ocupacion}%
+            </Typography>
+          </Box>
+        </Box>
+
+        <Stack flex={1} spacing={1}>
+          <LinearProgress
+            variant="determinate"
+            value={ocupacion}
+            sx={{
+              height: 10,
+              borderRadius: 2,
+              bgcolor: 'rgba(255,255,255,0.25)',
+              '& .MuiLinearProgress-bar': { backgroundColor: '#fff' },
+            }}
+          />
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="caption" sx={{ color: '#fff' }}>
+              {asignados} / {total} usados
+            </Typography>
+            <Chip
+              size="small"
+              label={ocupacion < 50 ? 'Baja' : ocupacion < 80 ? 'Media' : 'Alta'}
+              sx={{
+                bgcolor: '#fff',
+                color: ocupacion < 50 ? '#1976d2' : ocupacion < 80 ? '#ef6c00' : '#d32f2f',
+                fontWeight: 700,
+                height: 22,
+              }}
+            />
+          </Stack>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+}
+
+/* ---------- página ---------- */
+export default function DashboardCliente() {
   const [lockers, setLockers] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const token = localStorage.getItem('token');
-  const decoded = token ? jwtDecode(token) : null;
+  const [token, setToken] = useState('');
+  const [empresaId, setEmpresaId] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!token || !decoded?.empresa_id) {
+    try {
+      const t = localStorage.getItem('token');
+      if (!t) {
         setLoading(false);
+        setError('No hay sesión activa.');
         return;
       }
-
-      try {
-        const resLockers = await fetch(`/api/lockers?empresa_id=${decoded.empresa_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const lockersData = await resLockers.json();
-        setLockers(Array.isArray(lockersData) ? lockersData : []);
-
-        const resEmpleados = await fetch('/api/usuarios/', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const empleadosData = await resEmpleados.json();
-        setEmpleados(Array.isArray(empleadosData) ? empleadosData : []);
-      } catch (err) {
-        setError('Error al cargar datos. Revisa la consola.');
-        console.error('Error loading data:', err);
-      } finally {
+      const decoded = jwtDecode(t);
+      const empId = Number(decoded?.empresa_id);
+      if (!empId) {
         setLoading(false);
+        setError('El token no contiene empresa_id.');
+        return;
       }
+      setToken(t);
+      setEmpresaId(empId);
+    } catch {
+      setLoading(false);
+      setError('Token inválido. Inicia sesión nuevamente.');
+    }
+  }, []);
+
+  const fetchJSON = async (url, opts = {}) => {
+    const res = await fetch(url, opts);
+    const ct = res.headers.get('content-type') || '';
+    const data = ct.includes('application/json') ? await res.json() : await res.text().catch(() => ({}));
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message)) || `Error HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  };
+
+  const loadData = async () => {
+    if (!token || !empresaId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const lockersData = await fetchJSON(`${API_URL}/api/lockers/empresa/${empresaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setLockers(Array.isArray(lockersData) ? lockersData : []);
+
+      const empleadosData = await fetchJSON(
+        `${API_URL}/api/usuarios?rol_id=3&empresa_id=${empresaId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const emps = (Array.isArray(empleadosData) ? empleadosData : []).filter(
+        (e) => Number(e?.empresa_id) === Number(empresaId) && String(e?.rol_id) === '3'
+      );
+      setEmpleados(emps);
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError(err.message || 'Error al cargar datos.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token && empresaId) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, empresaId]);
+
+  const { totalLockers, asignados, disponibles, totalEmpleados, ocupacion } = useMemo(() => {
+    const total = lockers.length;
+    const asig = lockers.filter(
+      (l) => String(l?.estado) === 'activo' && l?.usuario_id !== null && l?.usuario_id !== undefined
+    ).length;
+    const disp = Math.max(0, total - asig);
+    const occ = total > 0 ? Math.round((asig / total) * 100) : 0;
+    return {
+      totalLockers: total,
+      asignados: asig,
+      disponibles: disp,
+      totalEmpleados: empleados.length,
+      ocupacion: occ,
     };
+  }, [lockers, empleados]);
 
-    fetchData();
-  }, [token, decoded]);
-
-  const totalLockers = lockers.length;
-  const asignados = lockers.filter(l => l.estado === 'activo').length;
-  const disponibles = lockers.filter(l => l.estado === 'inactivo').length;
-  const totalEmpleados = empleados.length;
-
-const statCards = [
-  {
-    title: 'Total de Lockers',
-    value: totalLockers,
-    icon: <LockersIcon fontSize="large" />,
-    color: 'linear-gradient(135deg, rgb(26, 39, 94), rgb(33, 58, 130))',
-  },
-  {
-    title: 'Asignados',
-    value: asignados,
-    icon: <AssignmentIcon fontSize="large" />,
-    color: 'linear-gradient(135deg, rgb(199, 90, 14), rgb(233, 119, 47))',
-  },
-  {
-    title: 'Disponibles',
-    value: disponibles,
-    icon: <StorageIcon fontSize="large" />,
-    color: 'linear-gradient(135deg, rgb(26, 39, 94), rgb(33, 58, 130))',
-  },
-  {
-    title: 'Total de Empleados',
-    value: totalEmpleados,
-    icon: <PeopleIcon fontSize="large" />,
-    color: 'linear-gradient(135deg, rgb(199, 90, 14), rgb(233, 119, 47))',
-  },
-];
-
+  const statCards = [
+    {
+      label: 'Total de Lockers',
+      value: totalLockers,
+      icon: <LockersIcon fontSize="large" />,
+      gradient: 'linear-gradient(135deg, #1a275e, #203679)',
+    },
+    {
+      label: 'Asignados',
+      value: asignados,
+      icon: <AssignmentIcon fontSize="large" />,
+      gradient: 'linear-gradient(135deg, #c75a0e, #e9772f)',
+    },
+    {
+      label: 'Disponibles',
+      value: disponibles,
+      icon: <StorageIcon fontSize="large" />,
+      gradient: 'linear-gradient(135deg, #1a275e, #203679)',
+    },
+    {
+      label: 'Total de Empleados',
+      value: totalEmpleados,
+      icon: <PeopleIcon fontSize="large" />,
+      gradient: 'linear-gradient(135deg, #c75a0e, #e9772f)',
+    },
+  ];
 
   return (
-    <Box
-      display="flex"
-      minHeight="100vh"
-      sx={{ background: 'linear-gradient(120deg, #1a2540 70%, #232E4F 100%)' }}
-    >
+    <Box display="flex" minHeight="100vh" sx={{ background: 'radial-gradient(80rem 40rem at 10% -30%, #18223f, #0b1220)' }}>
       <Sidebar />
-      <Box flexGrow={1} p={0} sx={{ minHeight: '100vh' }}>
-        <Topbar title="Dashboard Cliente" />
+      <Box flexGrow={1} sx={{ minHeight: '100vh' }}>
+  
 
-        {/* Banner superior */}
+        {/* HERO */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #1976d2 60%, #00c6fb 100%)',
-            p: 4,
-            borderRadius: '0 0 32px 32px',
-            color: 'white',
-            mb: 4,
+            px: 3,
+            py: 4,
+            background:
+              'linear-gradient(135deg, rgba(25,118,210,1) 40%, rgba(0,198,251,1) 100%)',
+            borderRadius: '0 0 28px 28px',
+            color: '#fff',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <Typography variant="h4" fontWeight="bold" letterSpacing={1}>
-            Bienvenido al panel de cliente
-          </Typography>
-          <Typography variant="body1" mt={1}>
-            Visualiza el estado de lockers y personal asignado en tu empresa.
-          </Typography>
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'radial-gradient(60rem 18rem at -20% -10%, rgba(255,255,255,.25), transparent 40%)',
+              pointerEvents: 'none',
+            }}
+          />
+          <Stack direction={{ xs: 'column', md: 'row' }} alignItems="center" justifyContent="space-between" spacing={3}>
+            <Box>
+              <Typography variant="h4" fontWeight={800} letterSpacing={0.5}>
+                Bienvenido al panel de cliente
+              </Typography>
+              <Typography variant="body1" sx={{ opacity: 0.95, mt: 0.5 }}>
+                Visualiza el estado de lockers y personal asignado en tu empresa.
+              </Typography>
+              <Button
+                onClick={loadData}
+                variant="outlined"
+                sx={{
+                  mt: 2,
+                  color: '#fff',
+                  borderColor: alpha('#fff', 0.7),
+                  '&:hover': { borderColor: '#fff', background: alpha('#fff', 0.1) },
+                }}
+                startIcon={<RefreshIcon />}
+              >
+                Refrescar datos
+              </Button>
+            </Box>
+
+            <OccupancyCard
+              asignados={asignados}
+              total={totalLockers}
+              ocupacion={ocupacion}
+              onRefresh={loadData}
+            />
+          </Stack>
         </Box>
 
         {/* Errores */}
         {error && (
-          <Paper sx={{ p: 2, mb: 3, backgroundColor: '#ffebee' }}>
-            <Typography color="error">{error}</Typography>
-          </Paper>
+          <Alert severity="error" sx={{ mx: 3, mt: 2 }}>
+            {error}{' '}
+            <Button color="inherit" size="small" onClick={loadData} sx={{ ml: 1 }}>
+              Reintentar
+            </Button>
+          </Alert>
         )}
 
-        {/* Estadísticas */}
+        {/* KPIs */}
         {loading ? (
-          <Typography color="white" p={2}>
-            Cargando datos...
-          </Typography>
-        ) : (
-          <Grid container spacing={4} mt={1} px={3}>
-            {statCards.map((stat, i) => (
-              <Grid key={i} item xs={12} sm={6} md={3}>
-                <Paper
-                  elevation={6}
-                  sx={{
-                    p: 3,
-                    borderRadius: 4,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: 170,
-                    background: stat.color,
-                    color: '#fff',
-                    position: 'relative',
-                    boxShadow: '0 8px 36px 0 rgba(0,0,0,0.12)',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      transform: 'scale(1.04)',
-                      boxShadow: '0 16px 48px 0 rgba(0,0,0,0.18)',
-                    },
-                  }}
-                >
-                  <Box mb={1}>{stat.icon}</Box>
-                  <Typography variant="h3" fontWeight="bold">
-                    {stat.value}
-                  </Typography>
-                  <Typography variant="subtitle1" sx={{ opacity: 0.93 }}>
-                    {stat.title}
-                  </Typography>
+          <Grid container spacing={3} sx={{ px: 3, mt: 2 }}>
+            {[...Array(4)].map((_, i) => (
+              <Grid item xs={12} sm={6} md={3} key={i}>
+                <Paper sx={{ p: 3, borderRadius: 4, bgcolor: alpha('#fff', 0.04) }}>
+                  <Skeleton variant="circular" width={48} height={48} />
+                  <Skeleton variant="text" height={42} sx={{ mt: 1 }} />
+                  <Skeleton variant="text" width="60%" />
                 </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Grid container spacing={3} sx={{ px: 3, mt: 2 }}>
+            {statCards.map((s, i) => (
+              <Grid item xs={12} sm={6} md={3} key={i}>
+                <StatCard icon={s.icon} label={s.label} value={s.value} gradient={s.gradient} />
               </Grid>
             ))}
           </Grid>
         )}
 
-        {/* Separador */}
-        <Divider sx={{ my: 6, borderColor: 'rgba(255,255,255,0.10)' }} />
+        {/* Estado vacío amigable */}
+        {!loading && !error && (!totalLockers || !totalEmpleados) && (
+          <Box px={3} mt={4}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                bgcolor: alpha('#fff', 0.06),
+                color: '#fff',
+                border: `1px solid ${alpha('#fff', 0.12)}`,
+              }}
+            >
+              <Typography variant="subtitle1" gutterBottom fontWeight={700}>
+                ¿Recién empiezas?
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                {totalLockers === 0
+                  ? 'Aún no tienes lockers creados. Activa una suscripción o crea lockers desde la sección “Lockers”.'
+                  : 'Aún no hay empleados registrados con rol Trabajador (rol_id = 3). Agrega empleados desde la sección “Usuarios”.'}
+              </Typography>
+            </Paper>
+          </Box>
+        )}
+
+        <Divider sx={{ my: 6, borderColor: alpha('#fff', 0.1) }} />
       </Box>
     </Box>
   );
-};
-
-export default DashboardCliente;
+}

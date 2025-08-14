@@ -1,5 +1,15 @@
+// src/components/Layout/Sidebar.jsx
 import React from 'react';
-import { Drawer, List, ListItem, ListItemIcon, ListItemText } from '@mui/material';
+import {
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Box,
+  Typography
+} from '@mui/material';
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
@@ -8,40 +18,32 @@ import {
   InsertChart as ReportIcon,
   PersonAdd as RegisterIcon,
   Visibility as MonitorIcon,
-  ShowChart as ChartIcon,
   Lock as LockersIcon,
   Person as PersonIcon,
   Business as BusinessIcon,
-  BarChart as GraficasIcon,
 } from '@mui/icons-material';
 import Logo from '../common/Logo';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-
 
 const Sidebar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = React.useContext(AuthContext);
 
   const handleLogout = async () => {
     const token = localStorage.getItem('token');
-
     try {
-      const response = await fetch('http://localhost:5000/api/usuarios/logout', {
+      await fetch('http://localhost:5000/api/usuarios/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
       });
-
-      if (!response.ok) {
-        console.error('Error al cerrar sesión en backend');
-      }
     } catch (error) {
-      console.error('Error al comunicarse con backend para logout:', error);
+      console.error('Error al cerrar sesión en backend:', error);
     }
-
     localStorage.removeItem('token');
     logout();
     navigate('/login');
@@ -74,15 +76,14 @@ const Sidebar = () => {
   ];
 
   let menuItems = clienteMenuItems;
-  if (isSuperAdmin) {
-    menuItems = superAdminMenuItems;
-  } else if (isAdminEmpresa) {
-    menuItems = adminEmpresaMenuItems;
-  }
+  if (isSuperAdmin) menuItems = superAdminMenuItems;
+  else if (isAdminEmpresa) menuItems = adminEmpresaMenuItems;
 
-  let drawerBgColor = '#37474f';
-  if (isSuperAdmin) drawerBgColor = '#1a2540';
-  else if (isAdminEmpresa) drawerBgColor = '#263238';
+  const drawerBgGradient = isSuperAdmin
+    ? 'linear-gradient(180deg, #1a2540 0%, #0f172a 100%)'
+    : isAdminEmpresa
+      ? 'linear-gradient(180deg, #263238 0%, #1a1f24 100%)'
+      : 'linear-gradient(180deg, #37474f 0%, #222 100%)';
 
   return (
     <Drawer
@@ -93,24 +94,81 @@ const Sidebar = () => {
         '& .MuiDrawer-paper': {
           width: 240,
           boxSizing: 'border-box',
-          backgroundColor: drawerBgColor,
-          color: '#ffffff',
+          background: drawerBgGradient,
+          color: '#fff',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
         },
       }}
     >
-      <Logo />
-      <List>
-        {menuItems.map((item) => (
-          <ListItem button key={item.text} onClick={() => navigate(item.path)}>
-            <ListItemIcon sx={{ color: '#ffffff' }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.text} />
-          </ListItem>
-        ))}
-        <ListItem button onClick={handleLogout}>
-          <ListItemIcon sx={{ color: '#ffffff' }}><LogoutIcon /></ListItemIcon>
-          <ListItemText primary="Cerrar Sesión" />
-        </ListItem>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Logo />
+      </Box>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+
+      <List sx={{ flexGrow: 1 }}>
+        {menuItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <ListItemButton
+              key={item.text}
+              onClick={() => navigate(item.path)}
+              sx={{
+                borderRadius: 1,
+                mx: 1,
+                my: 0.3,
+                backgroundColor: isActive ? 'rgba(79,195,247,0.15)' : 'transparent',
+                '&:hover': {
+                  backgroundColor: 'rgba(79,195,247,0.25)',
+                },
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  color: isActive ? '#4fc3f7' : '#b0bec5',
+                  minWidth: 40,
+                }}
+              >
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: '0.95rem',
+                  color: isActive ? '#fff' : '#cfd8dc',
+                }}
+              />
+            </ListItemButton>
+          );
+        })}
       </List>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+
+      <Box sx={{ p: 1 }}>
+        <ListItemButton
+          onClick={handleLogout}
+          sx={{
+            borderRadius: 1,
+            mx: 1,
+            backgroundColor: 'rgba(244,67,54,0.15)',
+            '&:hover': { backgroundColor: 'rgba(244,67,54,0.3)' },
+          }}
+        >
+          <ListItemIcon sx={{ color: '#ef5350', minWidth: 40 }}>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Cerrar Sesión"
+            primaryTypographyProps={{
+              fontWeight: 700,
+              fontSize: '0.95rem',
+              color: '#ef9a9a',
+            }}
+          />
+        </ListItemButton>
+      </Box>
     </Drawer>
   );
 };

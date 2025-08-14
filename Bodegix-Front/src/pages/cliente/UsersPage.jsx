@@ -12,7 +12,6 @@ import {
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import Sidebar from '../../components/Layout/Sidebar';
-import Topbar from '../../components/Layout/Topbar';
 
 const UsersPage = () => {
     const [users, setUsers] = useState([]);
@@ -44,8 +43,6 @@ const UsersPage = () => {
         <Box display="flex">
             <Sidebar />
             <Box flexGrow={1} p={3}>
-                <Topbar title="Administración de Usuarios" />
-
                 <Box display="flex" justifyContent="space-between" mb={3} mt={2}>
                     <TextField
                         variant="outlined"

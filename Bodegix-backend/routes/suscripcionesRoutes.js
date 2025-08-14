@@ -1,25 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const suscripcionesController = require('../controllers/suscripcionesController');
-const auth = require('../middlewares/authMiddleware'); // Protege con auth
+const auth = require('../middlewares/authMiddleware');
 
-// 📌 Primero el endpoint de reporte (antes de /:id)
-// Quita el auth si quieres probar sin token
+// Reporte (si quieres que requiera token, agrega 'auth' como middleware)
 router.get('/reporte', suscripcionesController.getReporteSuscripciones);
 
-// ✅ GET todas las suscripciones
+// Estado de suscripción por empresa (devuelve { activa: true/false })
+router.get('/status', auth, suscripcionesController.getEstadoEmpresa);
+
+// Listar todas las suscripciones
 router.get('/', auth, suscripcionesController.getSuscripciones);
 
-// ✅ GET suscripción por ID
+// Obtener una suscripción por ID
 router.get('/:id', auth, suscripcionesController.getSuscripcionById);
 
-// ✅ POST crear suscripción
+// Crear suscripción
 router.post('/', auth, suscripcionesController.createSuscripcion);
 
-// ✅ PUT actualizar suscripción
+// Actualizar suscripción
 router.put('/:id', auth, suscripcionesController.updateSuscripcion);
 
-// ✅ DELETE eliminar suscripción
+// Eliminar suscripción
 router.delete('/:id', auth, suscripcionesController.deleteSuscripcion);
 
 module.exports = router;
