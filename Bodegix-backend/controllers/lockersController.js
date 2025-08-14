@@ -161,14 +161,19 @@ exports.deleteLocker = async (req, res) => {
 exports.getLockersPorUsuario = async (req, res) => {
   try {
     const usuarioId = req.params.id;
+
     const usuario = await Usuario.findByPk(usuarioId);
     if (!usuario) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
     const lockers = await Locker.findAll({
-      where: { empresa_id: usuario.empresa_id },
-      include: ['empresa']
+      where: {
+        empresa_id: usuario.empresa_id,
+        usuario_id: usuarioId,   // <- aquí filtramos por el dueño
+        estado: 'activo',        // <- opcional
+      },
+      include: ['empresa'],
     });
 
     res.json(lockers);
@@ -176,6 +181,7 @@ exports.getLockersPorUsuario = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 exports.getLockerById = async (req, res) => {
   try {

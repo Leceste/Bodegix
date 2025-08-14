@@ -18,6 +18,7 @@ const loginMovilRoutes = require('./routes/loginMovilRoute');
 const paypalRoutes = require('./routes/paypalRoutes');
 const reportsRoutes = require('./routes/reportsRoutes');
 const lockersSensorsRoutes = require('./routes/lockersSensorsRoutes');
+const alertasRoutes = require('./routes/alertasRoutes');
 
 // Rutas Mongo (API agrupada + compat para la app móvil)
 const { api: temperaturasRouter, compat: temperaturaCompat } = require('./routes/temperaturas');
@@ -43,13 +44,11 @@ app.use('/api/eventos', eventosRoutes);
 app.use('/api/movil', loginMovilRoutes);
 app.use('/api/paypal', paypalRoutes);
 app.use('/api/reports', reportsRoutes);
-
+app.use('/api/alertas', alertasRoutes);
 app.use('/api', lockersSensorsRoutes);
 
 // Registrar rutas Mongo
-// /api/temperaturas -> lista, latest, latest-all
 app.use('/api/temperaturas', temperaturasRouter);
-// /api/temperatura -> GET /:lockerId (array compat) y POST (ingesta IoT)
 app.use('/api', temperaturaCompat);
 
 // Conexión y arranque
