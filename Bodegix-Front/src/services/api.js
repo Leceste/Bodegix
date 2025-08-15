@@ -1,36 +1,34 @@
+// src/services/api.js
 import axios from 'axios';
 
-// 1) Lee de env (CRA) y cae a localhost en dev
-const RAW = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const PROD_HOST = 'https://bodegix-backend.onrender.com';
+const isProd =
+  typeof window !== 'undefined' &&
+  !/^(http:\/\/(localhost|127\.0\.0\.1)|chrome-extension:\/\/)/i.test(window.location.origin);
 
-// 2) Normaliza para que siempre termine en /api (evita dobles o faltantes)
-const baseURL = RAW.endsWith('/api')
-  ? RAW
-  : `${RAW.replace(/\/+$/, '')}/api`;
+// 1) Lee env; si no hay:
+//    - en prod: cae a tu backend público
+//    - en dev: cae a localhost
+const RAW =
+  process.env.REACT_APP_API_URL ||
+  (isProd ? PROD_HOST : 'http://localhost:5000');
 
-const api = axios.create({
-  baseURL,
-  // timeout: 10000, // opcional
-});
+// 2) Normaliza para terminar en /api
+const baseURL = RAW.endsWith('/api') ? RAW : `${RAW.replace(/\/+$/, '')}/api`;
 
-// Adjunta token si existe
+// 3) Evita prod con localhost
+if (isProd && /localhost/i.test(baseURL)) {
+  throw new Error(`[API] baseURL inválido en producción: ${baseURL}`);
+}
+
+const api = axios.create({ baseURL });
+
+// Adjunta token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// (opcional) Maneja 401 automático:
-// api.interceptors.response.use(
-//   r => r,
-//   (err) => {
-//     if (err?.response?.status === 401) {
-//       localStorage.removeItem('token');
-//       window.location.href = '/login';
-//     }
-//     return Promise.reject(err);
-//   }
-// );
 console.log('[API] baseURL =>', baseURL);
-
 export default api;
