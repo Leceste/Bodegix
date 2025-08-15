@@ -1,237 +1,119 @@
-const Usuario = require('../models/Usuario');
-const Empresa = require('../models/Empresa'); // ✅ necesario
-const Rol = require('../models/Rol');   
-const bcrypt = require('bcrypt');
+const { Usuario, Rol, Empresa } = require('../models');
 const jwt = require('jsonwebtoken');
-
+const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID); // Asegúrate de que esté en tu .env
 
-exports.loginConGoogle = async (req, res) => {
-  const { token } = req.body;
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-  if (!token) return res.status(400).json({ message: 'Token no proporcionado' });
+function sign(u) {
+  const payload = { id: u.id, email: u.email, rol_id: u.rol_id, empresa_id: u.empresa_id };
+  const opts = process.env.JWT_EXPIRES_IN ? { expiresIn: process.env.JWT_EXPIRES_IN } : {};
+  return jwt.sign(payload, process.env.JWT_SECRET, opts);
+}
 
+exports.getUsuariosAdmin = async (_req, res) => {
   try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    const { email, name } = payload;
-
-    let usuario = await Usuario.findOne({ where: { correo: email } });
-
-    const tokenJWT = jwt.sign(
-      {
-        id: usuario.id,
-        rol_id: usuario.rol_id,
-        empresa_id: usuario.empresa_id,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' }
-    );
-
-    usuario.token = tokenJWT;
-    await usuario.save();
-
-    const { contraseña: _, ...usuarioSinContraseña } = usuario.toJSON();
-    res.json({ usuario: usuarioSinContraseña, token: tokenJWT });
-  } catch (error) {
-    console.error('[Google Login Error]', error);
-    res.status(401).json({ message: 'Token de Google inválido' });
-  }
+    const rows = await Usuario.findAll({ include: [{ model: Rol, as: 'rol' }, { model: Empresa, as: 'empresa' }] });
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: 'Error al listar' }); }
 };
 
-
-exports.getUsuariosAdmin = async (req, res) => {
+exports.getUsuarios = async (_req, res) => {
   try {
-    const { rol_id } = req.usuario;
-
-    if (rol_id !== 1) {
-      return res.status(403).json({ error: 'Acceso no autorizado' });
-    }
-
-    const usuarios = await Usuario.findAll({
-      attributes: { exclude: ['contraseña'] },
-      include: [
-        { model: Empresa, as: 'empresa' },
-        { model: Rol, as: 'rol' }
-      ]
-    });
-
-    res.json(usuarios);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-exports.getUsuarios = async (req, res) => {
-  try {
-    const empresa_id = req.usuario?.empresa_id;
-
-    if (!empresa_id) {
-      return res.status(400).json({ error: 'empresa_id no proporcionado en el token' });
-    }
-
-    const usuarios = await Usuario.findAll({
-      where: { empresa_id },
-      attributes: { exclude: ['contraseña'] },
-      include: [
-        { model: Empresa, as: 'empresa' },
-        { model: Rol, as: 'rol' }
-      ]
-    });
-
-    res.json(usuarios);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-exports.createUsuario = async (req, res) => {
-    try {
-        const { nombre, correo, contraseña, rol_id, empresa_id } = req.body;
-
-        if (!nombre || !correo || !contraseña || !rol_id || !empresa_id) {
-            return res.status(400).json({ error: 'Todos los campos son obligatorios' });
-        }
-
-        const usuarioExistente = await Usuario.findOne({ where: { correo } });
-        if (usuarioExistente) {
-            return res.status(409).json({ error: 'El correo ya está registrado' });
-        }
-
-        const hash = await bcrypt.hash(contraseña, 10);
-
-        const usuario = await Usuario.create({
-            nombre,
-            correo,
-            contraseña: hash,
-            rol_id,
-            empresa_id
-        });
-
-        const { contraseña: _, ...usuarioSinContraseña } = usuario.toJSON();
-        res.status(201).json(usuarioSinContraseña);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.loginUsuario = async (req, res) => {
-    try {
-        const { correo, contraseña } = req.body;
-
-        if (!correo || !contraseña) {
-            return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
-        }
-
-        const usuario = await Usuario.findOne({ where: { correo } });
-        if (!usuario) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-
-        const match = await bcrypt.compare(contraseña, usuario.contraseña);
-        if (!match) {
-            return res.status(401).json({ error: 'Contraseña incorrecta' });
-        }
-
-        // Añadido empresa_id al token
-        const token = jwt.sign(
-            { id: usuario.id, rol_id: usuario.rol_id, empresa_id: usuario.empresa_id },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
-        );
-
-        usuario.token = token;
-        await usuario.save();
-
-        const { contraseña: _, ...usuarioSinContraseña } = usuario.toJSON();
-        res.json({ usuario: usuarioSinContraseña, token });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.updateUsuario = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { nombre, correo, contraseña, rol_id, empresa_id } = req.body;
-
-        const usuario = await Usuario.findByPk(id);
-        if (!usuario) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-
-        if (correo && correo !== usuario.correo) {
-            const usuarioExistente = await Usuario.findOne({ where: { correo } });
-            if (usuarioExistente) {
-                return res.status(409).json({ error: 'El correo ya está registrado por otro usuario' });
-            }
-            usuario.correo = correo;
-        }
-
-        if (nombre) usuario.nombre = nombre;
-        if (rol_id) usuario.rol_id = rol_id;
-        if (empresa_id) usuario.empresa_id = empresa_id;
-
-        if (contraseña) {
-            const hash = await bcrypt.hash(contraseña, 10);
-            usuario.contraseña = hash;
-        }
-
-        await usuario.save();
-
-        const { contraseña: _, ...usuarioSinContraseña } = usuario.toJSON();
-        res.json(usuarioSinContraseña);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.logoutUsuario = async (req, res) => {
-    try {
-        const usuarioId = req.usuario.id;
-        await Usuario.update({ token: null }, { where: { id: usuarioId } });
-        res.json({ message: 'Sesión cerrada correctamente' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-exports.deleteUsuario = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const usuario = await Usuario.findByPk(id);
-        if (!usuario) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-
-        await usuario.destroy();
-        res.json({ message: 'Usuario eliminado correctamente' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    const rows = await Usuario.findAll({ attributes: { exclude: ['password'] } });
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: 'Error al listar' }); }
 };
 
 exports.getUsuarioById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const usuario = await Usuario.findByPk(id, {
-            attributes: { exclude: ['contraseña'] },
-            include: ['rol', 'empresa']
-        });
+  try {
+    const u = await Usuario.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+    if (!u) return res.status(404).json({ error: 'No encontrado' });
+    res.json(u);
+  } catch (e) { res.status(500).json({ error: 'Error' }); }
+};
 
-        if (!usuario) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
+exports.createUsuario = async (req, res) => {
+  try {
+    const { nombre, email, password, rol_id, empresa_id } = req.body;
+    if (!nombre || !email || !password || !rol_id) return res.status(400).json({ error: 'Campos requeridos' });
 
-        res.json(usuario);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    const exists = await Usuario.findOne({ where: { email } });
+    if (exists) return res.status(409).json({ error: 'Email ya registrado' });
+
+    const hash = await bcrypt.hash(password, 10);
+    const u = await Usuario.create({ nombre, email, password: hash, rol_id, empresa_id: empresa_id || null });
+    res.status(201).json({ id: u.id, nombre: u.nombre, email: u.email });
+  } catch (e) { res.status(500).json({ error: 'Error al crear' }); }
+};
+
+exports.updateUsuario = async (req, res) => {
+  try {
+    const { nombre, email, password, rol_id, empresa_id, estado } = req.body;
+    const u = await Usuario.findByPk(req.params.id);
+    if (!u) return res.status(404).json({ error: 'No encontrado' });
+
+    if (email && email !== u.email) {
+      const dup = await Usuario.findOne({ where: { email } });
+      if (dup) return res.status(409).json({ error: 'Email ya registrado' });
     }
+
+    if (password) req.body.password = await bcrypt.hash(password, 10);
+    await u.update({ nombre, email, password: req.body.password, rol_id, empresa_id, estado });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Error al actualizar' }); }
+};
+
+exports.deleteUsuario = async (req, res) => {
+  try {
+    const u = await Usuario.findByPk(req.params.id);
+    if (!u) return res.status(404).json({ error: 'No encontrado' });
+    await u.destroy();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Error al eliminar' }); }
+};
+
+exports.loginUsuario = async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email y password requeridos' });
+
+    const u = await Usuario.findOne({ where: { email } });
+    if (!u) return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    const ok = await bcrypt.compare(password, u.password);
+    if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    const token = sign(u);
+    res.json({ token, user: { id: u.id, nombre: u.nombre, email: u.email, rol_id: u.rol_id, empresa_id: u.empresa_id } });
+  } catch (e) { res.status(500).json({ error: 'Error de login' }); }
+};
+
+exports.logoutUsuario = async (_req, res) => {
+  res.json({ ok: true }); // JWT es stateless
+};
+
+exports.loginConGoogle = async (req, res) => {
+  try {
+    const { idToken } = req.body || {};
+    if (!idToken) return res.status(400).json({ error: 'idToken requerido' });
+
+    const ticket = await googleClient.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload(); // { email, name, ... }
+    const email = payload.email;
+    let u = await Usuario.findOne({ where: { email } });
+
+    if (!u) {
+      u = await Usuario.create({
+        nombre: payload.name || email,
+        email,
+        password: await bcrypt.hash(Math.random().toString(36).slice(2), 10),
+        rol_id: 3,            // cliente por defecto
+        empresa_id: null
+      });
+    }
+
+    const token = sign(u);
+    res.json({ token, user: { id: u.id, nombre: u.nombre, email: u.email, rol_id: u.rol_id, empresa_id: u.empresa_id } });
+  } catch (e) { res.status(500).json({ error: 'Login Google falló' }); }
 };

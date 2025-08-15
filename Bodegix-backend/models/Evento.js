@@ -1,7 +1,13 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
+
 const Evento = sequelize.define('Evento', {
-    fecha: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    datos_json: { type: DataTypes.JSON },
-}, { tableName: 'eventos', timestamps: false });
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+  empresa_id: { type: DataTypes.INTEGER, allowNull: true },
+  tipo: { type: DataTypes.STRING(50), allowNull: false },
+  descripcion: { type: DataTypes.TEXT, allowNull: true }
+}, {
+  tableName: 'eventos'
+});
+
 module.exports = Evento;

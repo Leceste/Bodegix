@@ -2,13 +2,13 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
 const Plan = sequelize.define('Plan', {
-  nombre: { type: DataTypes.STRING, allowNull: false, unique: true },
-  limite_usuarios: { type: DataTypes.INTEGER, allowNull: false },
-  costo: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-  lockers: { type: DataTypes.INTEGER, allowNull: false },
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+  nombre: { type: DataTypes.STRING(100), allowNull: false },
+  lockers: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+  precio: { type: DataTypes.DECIMAL(10,2), allowNull: false, defaultValue: 0.00 },
+  duracion_meses: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 }
 }, {
-  tableName: 'planes',
-  timestamps: false
+  tableName: 'planes'
 });
 
 module.exports = Plan;

@@ -1,13 +1,11 @@
 const express = require('express');
-const router = express.Router();
-const planesController = require('../controllers/planesController'); // ✅ AHORA COINCIDE
+const { Plan } = require('../models');
 const auth = require('../middlewares/authMiddleware');
+const router = express.Router();
 
-// CRUD protegido con auth
-router.get('/', auth, planesController.getPlanes);
-router.get('/:id', auth, planesController.getPlanById);
-router.post('/', auth, planesController.createPlan);
-router.put('/:id', auth, planesController.updatePlan);
-router.delete('/:id', auth, planesController.deletePlan);
+router.get('/', auth, async (_req, res) => {
+  const rows = await Plan.findAll();
+  res.json(rows);
+});
 
 module.exports = router;
