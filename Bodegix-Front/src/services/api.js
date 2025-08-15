@@ -31,5 +31,6 @@ api.interceptors.request.use((config) => {
 //     return Promise.reject(err);
 //   }
 // );
+console.log('[API] baseURL =>', baseURL);
 
 export default api;
