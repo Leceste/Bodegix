@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-Bodegix-Front/node_modules/
-=======
 # .gitignore
 node_modules/
 .cache/
->>>>>>> 21ff8b6945733740873a84792d5fa5b5c5a7738f

@@ -1,3 +1,4 @@
+// routes/temperaturas.js
 const express = require('express');
 const Temperatura = require('../models/Temperatura');
 
@@ -7,8 +8,12 @@ function normalizeLockerId(id) {
   return /^LOCKER_/i.test(s) ? s.toUpperCase() : `LOCKER_${s.padStart(3, '0')}`;
 }
 
+/* =========================
+ *  A) API agrupada: /api/temperaturas/...
+ * ========================= */
 const api = express.Router();
 
+// GET /api/temperaturas?locker_id=001|LOCKER_001&limit=50
 api.get('/', async (req, res) => {
   try {
     const { locker_id } = req.query;
@@ -33,6 +38,7 @@ api.get('/', async (req, res) => {
   }
 });
 
+// GET /api/temperaturas/latest?locker_id=001|LOCKER_001
 api.get('/latest', async (req, res) => {
   try {
     const { locker_id } = req.query;
@@ -52,6 +58,7 @@ api.get('/latest', async (req, res) => {
   }
 });
 
+// GET /api/temperaturas/latest-all
 api.get('/latest-all', async (_req, res) => {
   try {
     const data = await Temperatura.aggregate([
@@ -67,8 +74,13 @@ api.get('/latest-all', async (_req, res) => {
   }
 });
 
+/* =========================
+ *  B) Compat móvil: /api/temperatura/...
+ *     (tu app espera un ARRAY con 1 elemento)
+ * ========================= */
 const compat = express.Router();
 
+// GET /api/temperatura/:lockerId  ->  [ { ... } ]
 compat.get('/temperatura/:lockerId', async (req, res) => {
   try {
     const lockerId = normalizeLockerId(req.params.lockerId);
@@ -92,6 +104,7 @@ compat.get('/temperatura/:lockerId', async (req, res) => {
   }
 });
 
+// POST /api/temperatura  -> ingesta IoT
 compat.post('/temperatura', async (req, res) => {
   try {
     let { locker_id, temperatura, humedad, peso, timestamp } = req.body;
@@ -117,4 +130,42 @@ compat.post('/temperatura', async (req, res) => {
   }
 });
 
-module.exports = { api, compat };
+/* =========================
+ *  C) Extras (agregados sin reemplazar lo anterior)
+ * ========================= */
+
+// Diagnóstico rápido
+const diag = express.Router();
+diag.get('/temperatura/ping', (_req, res) => res.json({ ok: true, now: new Date().toISOString() }));
+
+// Ingesta tolerante (convierte strings a número y aplica sentinelas si falla)
+const safe = express.Router();
+safe.post('/temperatura-safe', async (req, res) => {
+  try {
+    let { locker_id, temperatura, humedad, peso, timestamp } = req.body ?? {};
+    if (!locker_id) return res.status(400).json({ error: 'locker_id requerido' });
+
+    const toNum = (v) => (v === '' || v === null || v === undefined ? NaN : Number(v));
+    const t = toNum(temperatura);
+    const h = toNum(humedad);
+    const p = toNum(peso);
+
+    const doc = await Temperatura.create({
+      locker_id: normalizeLockerId(locker_id),
+      temperatura: Number.isFinite(t) ? t : -99,
+      humedad: Number.isFinite(h) ? h : -1,
+      peso: Number.isFinite(p) ? p : 0,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+    });
+
+    res.status(201).json(doc);
+  } catch (err) {
+    if (err?.errInfo?.details) {
+      console.error('VALIDATION DETAILS:', JSON.stringify(err.errInfo.details, null, 2));
+    }
+    console.error('POST /api/temperatura-safe error:', err?.message || err);
+    res.status(500).json({ error: 'Error al guardar lectura' });
+  }
+});
+
+module.exports = { api, compat, diag, safe };

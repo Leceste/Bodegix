@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { LockerNavigationProp } from '../src/navigation';
 
 // ⚠️ Ajusta esta URL según tu entorno
-const API_BASE = 'http://192.168.1.148:5000';
+const API_BASE = 'http://192.168.1.147:5000';
 
 type Locker = {
   id: number;
