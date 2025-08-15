@@ -1,5 +1,3 @@
-// utils/lockerId.js
-
 /** "001" -> "LOCKER_001", 1 -> "LOCKER_001", "LOCKER_001" -> "LOCKER_001" */
 function toMongoLockerId(id) {
   if (id == null) return id;

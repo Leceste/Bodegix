@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+
 const { sequelize } = require('./models/index');
 const { connectMongo } = require('./config/mongo');
 
@@ -20,8 +21,11 @@ const reportsRoutes = require('./routes/reportsRoutes');
 const lockersSensorsRoutes = require('./routes/lockersSensorsRoutes');
 const alertasRoutes = require('./routes/alertasRoutes');
 
-// Rutas Mongo (API agrupada + compat para la app móvil)
+// Rutas Mongo (API agrupada + compat)
 const { api: temperaturasRouter, compat: temperaturaCompat } = require('./routes/temperaturas');
+
+// Rutas QR/commands (NUEVO)
+const qrRoutes = require('./routes/qrRoutes');
 
 const app = express();
 
@@ -29,10 +33,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Healthcheck (opcional)
+// Healthcheck
 app.get('/health', (_req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
-// Registrar rutas MySQL
+// --- Monta QR primero ---
+app.use('/api', qrRoutes);
+
+// Rutas MySQL
 app.use('/api/planes', planesRoutes);
 app.use('/api/empresas', empresasRoutes);
 app.use('/api/roles', rolesRoutes);
@@ -47,7 +54,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/alertas', alertasRoutes);
 app.use('/api', lockersSensorsRoutes);
 
-// Registrar rutas Mongo
+// Rutas Mongo
 app.use('/api/temperaturas', temperaturasRouter);
 app.use('/api', temperaturaCompat);
 
@@ -61,6 +68,16 @@ const PORT = process.env.PORT || 5000;
 
     await connectMongo(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/lockers_iot');
     console.log('✅ Conectado a MongoDB');
+
+    // Opcional: asegurar índices de Mongoose (TTL y compuestos)
+    try {
+      const QrSession = require('./models/QrSession');
+      const Command   = require('./models/Command');
+      await QrSession.syncIndexes?.();
+      await Command.syncIndexes?.();
+    } catch (e) {
+      console.warn('ℹ️ No se pudieron sincronizar índices (opcional):', e.message);
+    }
 
     app.listen(PORT, () => {
       console.log(`🚀 Bodegix backend corriendo en el puerto ${PORT}`);

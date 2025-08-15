@@ -1,7 +1,5 @@
-// routes/temperaturas.js
 const express = require('express');
 const Temperatura = require('../models/Temperatura');
-
 
 function normalizeLockerId(id) {
   if (id == null) return id;
@@ -9,25 +7,19 @@ function normalizeLockerId(id) {
   return /^LOCKER_/i.test(s) ? s.toUpperCase() : `LOCKER_${s.padStart(3, '0')}`;
 }
 
-/* =========================
- *  A) API agrupada: /api/temperaturas/...
- * ========================= */
 const api = express.Router();
 
-// GET /api/temperaturas?locker_id=001|LOCKER_001&limit=50
 api.get('/', async (req, res) => {
   try {
     const { locker_id } = req.query;
     let { limit = 50 } = req.query;
 
-    // sanea limit
     limit = Number(limit);
     if (!Number.isFinite(limit) || limit <= 0) limit = 50;
-    limit = Math.min(limit, 500); // hard cap
+    limit = Math.min(limit, 500);
 
     const q = locker_id ? { locker_id: normalizeLockerId(locker_id) } : {};
     const data = await Temperatura.find(q, {
-      // proyección: ajusta si quieres menos campos
       locker_id: 1, temperatura: 1, humedad: 1, peso: 1, timestamp: 1, created_at: 1,
     })
       .sort({ timestamp: -1 })
@@ -41,7 +33,6 @@ api.get('/', async (req, res) => {
   }
 });
 
-// GET /api/temperaturas/latest?locker_id=001|LOCKER_001
 api.get('/latest', async (req, res) => {
   try {
     const { locker_id } = req.query;
@@ -61,7 +52,6 @@ api.get('/latest', async (req, res) => {
   }
 });
 
-// GET /api/temperaturas/latest-all
 api.get('/latest-all', async (_req, res) => {
   try {
     const data = await Temperatura.aggregate([
@@ -77,13 +67,8 @@ api.get('/latest-all', async (_req, res) => {
   }
 });
 
-/* =========================
- *  B) Compat móvil: /api/temperatura/...
- *     (tu app espera un ARRAY con 1 elemento)
- * ========================= */
 const compat = express.Router();
 
-// GET /api/temperatura/:lockerId  ->  [ { ... } ]
 compat.get('/temperatura/:lockerId', async (req, res) => {
   try {
     const lockerId = normalizeLockerId(req.params.lockerId);
@@ -107,7 +92,6 @@ compat.get('/temperatura/:lockerId', async (req, res) => {
   }
 });
 
-// POST /api/temperatura  -> ingesta IoT
 compat.post('/temperatura', async (req, res) => {
   try {
     let { locker_id, temperatura, humedad, peso, timestamp } = req.body;
@@ -125,7 +109,6 @@ compat.post('/temperatura', async (req, res) => {
 
     res.status(201).json(doc);
   } catch (err) {
-    // Si falla validación de Atlas, esto ayuda a ver el detalle en consola
     if (err?.errInfo?.details) {
       console.error('VALIDATION DETAILS:', JSON.stringify(err.errInfo.details, null, 2));
     }
