@@ -1,25 +1,16 @@
+// C:\Integradora\Bodegix-Front\src\components\Auth\LoginForm.jsx
 import React, { useState, useContext } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
-
 import {
-  TextField,
-  Button,
-  Box,
-  Typography,
-  IconButton,
-  InputAdornment,
-  Paper,
-  Divider,
+  TextField, Button, Box, Typography, IconButton, InputAdornment, Paper, Divider,
 } from '@mui/material';
 import {
-  Visibility,
-  VisibilityOff,
-  Email as EmailIcon,
-  Lock as LockIcon,
+  Visibility, VisibilityOff, Email as EmailIcon, Lock as LockIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api'; // ⬅️ usa tu wrapper
 
 const LoginForm = () => {
   const navigate = useNavigate();
@@ -29,87 +20,58 @@ const LoginForm = () => {
   const [mostrarContraseña, setMostrarContraseña] = useState(false);
   const [error, setError] = useState('');
 
-  const toggleMostrarContraseña = () => {
-    setMostrarContraseña((prev) => !prev);
-  };
+  const toggleMostrarContraseña = () => setMostrarContraseña((prev) => !prev);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     try {
-      const response = await fetch('http://localhost:5000/api/usuarios/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ correo, contraseña }),
-      });
-
-      const data = await response.json();
-      console.log('[LoginForm] Respuesta login:', data);
-
-      if (!response.ok) {
-        setError(data.message || 'Credenciales incorrectas.');
+      const { data } = await api.post('/usuarios/login', { correo, contraseña }); // ⬅️ sin localhost
+      if (!data?.usuario?.token) {
+        setError('No se recibió token en la respuesta.');
         return;
       }
+      const token = data.usuario.token;
+      login(token);
 
-      if (data.usuario && data.usuario.token) {
-        const token = data.usuario.token;
-        login(token);
-
-        const decoded = jwtDecode(token);
-        console.log('[LoginForm] Token decodificado:', decoded);
-
-        if (decoded.rol === 'superadmin' || decoded.rol_id === 1) {
-          navigate('/admin/dashboard');
-        } else if (decoded.rol === 'cliente' || decoded.rol_id === 2) {
-          navigate('/cliente/dashboard');
-        } else {
-          setError('Rol no autorizado para ingresar.');
-        }
+      const decoded = jwtDecode(token);
+      if (decoded.rol === 'superadmin' || decoded.rol_id === 1) {
+        navigate('/admin/dashboard');
+      } else if (decoded.rol === 'cliente' || decoded.rol_id === 2) {
+        navigate('/cliente/dashboard');
       } else {
-        setError('No se recibió token en la respuesta.');
+        setError('Rol no autorizado para ingresar.');
       }
     } catch (err) {
       console.error('[LoginForm] Error en login:', err);
-      setError('Error de conexión al servidor.');
+      const msg = err?.response?.data?.message || 'Error de conexión al servidor.';
+      setError(msg);
     }
   };
 
-  const handleGoogleLoginSuccess = async (credentialResponse) => {
-    const { credential } = credentialResponse;
+  const handleGoogleLoginSuccess = async ({ credential }) => {
     if (!credential) return setError('Error al obtener credenciales de Google');
-
     try {
-      const response = await fetch('http://localhost:5000/api/usuarios/google-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: credential }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.message || 'Error en autenticación con Google');
+      const { data } = await api.post('/usuarios/google-login', { token: credential }); // ⬅️ sin localhost
+      if (!data?.usuario?.token) {
+        setError('No se recibió token en la respuesta.');
         return;
       }
+      const token = data.usuario.token;
+      login(token);
 
-      if (data.usuario && data.usuario.token) {
-        const token = data.usuario.token;
-        login(token);
-        const decoded = jwtDecode(token);
-
-        if (decoded.rol === 'superadmin' || decoded.rol_id === 1) {
-          navigate('/admin/dashboard');
-        } else if (decoded.rol === 'cliente' || decoded.rol_id === 2) {
-          navigate('/cliente/dashboard');
-        } else {
-          setError('Rol no autorizado para ingresar.');
-        }
+      const decoded = jwtDecode(token);
+      if (decoded.rol === 'superadmin' || decoded.rol_id === 1) {
+        navigate('/admin/dashboard');
+      } else if (decoded.rol === 'cliente' || decoded.rol_id === 2) {
+        navigate('/cliente/dashboard');
       } else {
-        setError('No se recibió token en la respuesta.');
+        setError('Rol no autorizado para ingresar.');
       }
-    } catch (error) {
-      console.error('[LoginForm] Google login error:', error);
-      setError('Error al iniciar sesión con Google');
+    } catch (err) {
+      console.error('[LoginForm] Google login error:', err);
+      const msg = err?.response?.data?.message || 'Error al iniciar sesión con Google';
+      setError(msg);
     }
   };
 
@@ -118,6 +80,7 @@ const LoginForm = () => {
       <Typography variant="h5" align="center" gutterBottom>
         Iniciar Sesión
       </Typography>
+
       <form onSubmit={handleSubmit}>
         <Box mb={2}>
           <TextField
@@ -136,6 +99,7 @@ const LoginForm = () => {
             }}
           />
         </Box>
+
         <Box mb={2}>
           <TextField
             label="Contraseña"
@@ -160,11 +124,13 @@ const LoginForm = () => {
             }}
           />
         </Box>
+
         {error && (
           <Typography color="error" mb={2} textAlign="center">
             {error}
           </Typography>
         )}
+
         <Button type="submit" variant="contained" fullWidth size="large">
           Iniciar Sesión
         </Button>
